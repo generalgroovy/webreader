@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Readable Voice Range Reader</title>
+
+  <style>
+    :root {
+      --bg: #f4f1ec;
+      --panel: #ffffff;
+      --panel-soft: #f8f5ef;
+      --text: #1f1f1f;
+      --muted: #6b6b6b;
+      --border: #d8d2c8;
+      --accent: #4f6f52;
+      --accent-soft: #dbe8d7;
+      --danger: #9a3d3d;
+      --warn: #9a6a2f;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.08);
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #f4f1ec 0%, #edf3ed 100%);
+      color: var(--text);
+      line-height: 1.55;
+    }
+
+    header {
+      padding: 22px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.76);
+      backdrop-filter: blur(16px);
+      position: sticky;
+      top: 0;
+      z-index: 30;
+    }
+
+    .header-inner {
+      max-width: 1180px;
+      margin: auto;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: center;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.35rem, 3vw, 2.1rem);
+      line-height: 1.1;
+    }
+
+    .subtitle {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .layout {
+      max-width: 1180px;
+      margin: 24px auto 170px;
+      padding: 0 18px;
+      display: grid;
+      grid-template-columns: 340px minmax(0, 1fr);
+      gap: 22px;
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      header {
+        position: static;
+      }
+    }
+
+    .panel {
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .side {
+      padding: 18px;
+      align-self: start;
+      position: sticky;
+      top: 115px;
+    }
+
+    @media (max-width: 900px) {
+      .side {
+        position: static;
+      }
+    }
+
+    .reader {
+      min-height: 70vh;
+      padding: clamp(18px, 4vw, 42px);
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      font-size: 0.82rem;
+      margin: 14px 0 6px;
+      color: #353535;
+    }
+
+    input,
+    textarea,
+    select,
+    button {
+      font: inherit;
+    }
+
+    input[type="url"],
+    input[type="text"],
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 11px 12px;
+      background: #fff;
+      color: var(--text);
+      outline: none;
+    }
+
+    textarea {
+      min-height: 170px;
+      resize: vertical;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 14px;
+      cursor: pointer;
+      background: var(--text);
+      color: #fff;
+      font-weight: 700;
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-soft {
+      background: var(--accent-soft);
+      color: #243726;
+    }
+
+    .btn-danger {
+      background: #f1d9d9;
+      color: var(--danger);
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-top: 7px;
+    }
+
+    .status {
+      margin-top: 12px;
+      font-size: 0.84rem;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--panel-soft);
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+
+    .status.warn {
+      background: #fff4de;
+      color: var(--warn);
+    }
+
+    .status.error {
+      background: #ffe8e8;
+      color: var(--danger);
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      background: var(--panel-soft);
+      padding: 5px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+    }
+
+    .tab {
+      background: transparent;
+      color: var(--muted);
+      padding: 9px;
+    }
+
+    .tab.active {
+      background: #fff;
+      color: var(--text);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+    }
+
+    .mode-box {
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 14px;
+      background: var(--panel-soft);
+      border: 1px solid var(--border);
+    }
+
+    .reader-empty {
+      color: var(--muted);
+      max-width: 680px;
+    }
+
+    #articleTitle {
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      line-height: 1.06;
+      margin: 0 0 14px;
+      letter-spacing: -0.035em;
+    }
+
+    #articleMeta {
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 18px;
+      margin-bottom: 24px;
+    }
+
+    #content {
+      font-size: clamp(1.05rem, 1.4vw, 1.22rem);
+      max-width: 780px;
+    }
+
+    #content p,
+    #content li,
+    #content h2,
+    #content h3,
+    #content blockquote {
+      position: relative;
+    }
+
+    #content h2 {
+      font-size: 1.55rem;
+      margin-top: 2em;
+      line-height: 1.2;
+    }
+
+    #content h3 {
+      font-size: 1.22rem;
+      margin-top: 1.6em;
+    }
+
+    #content blockquote {
+      margin-left: 0;
+      padding-left: 18px;
+      border-left: 4px solid var(--accent-soft);
+      color: #444;
+    }
+
+    .selectable-block {
+      border-radius: 10px;
+      padding: 3px 5px;
+      margin-left: -5px;
+      transition: background 0.12s ease;
+      cursor: pointer;
+    }
+
+    .selectable-block:hover {
+      background: #f0f5ed;
+    }
+
+    .selected-range {
+      background: #dcebd8 !important;
+      outline: 1px solid #9bb993;
+    }
+
+    .current-sentence {
+      background: #f9e8ae !important;
+      outline: 1px solid #dec45c;
+    }
+
+    .range-controls {
+      margin-top: 10px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .range-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .small-value {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .control-bar {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      width: min(1120px, calc(100% - 24px));
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      box-shadow: 0 20px 70px rgba(0,0,0,0.16);
+      padding: 14px;
+      z-index: 50;
+      backdrop-filter: blur(18px);
+    }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 14px;
+      align-items: center;
+    }
+
+    @media (max-width: 760px) {
+      .control-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .play-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .progress-wrap {
+      min-width: 0;
+    }
+
+    .progress-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: var(--muted);
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .progress {
+      height: 12px;
+      background: var(--panel-soft);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+    }
+
+    .compact-controls {
+      display: grid;
+      grid-template-columns: 130px 130px;
+      gap: 8px;
+    }
+
+    @media (max-width: 760px) {
+      .compact-controls {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .chip {
+      font-size: 0.74rem;
+      padding: 5px 8px;
+      background: var(--panel-soft);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .kbd {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.72rem;
+      padding: 2px 5px;
+      background: #eee;
+      border-radius: 5px;
+      border: 1px solid #ddd;
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="header-inner">
+      <div>
+        <h1>Readable Voice Range Reader</h1>
+        <div class="subtitle">
+          Load text from a URL or paste content, select a reading range visually, then listen with configurable speech.
+        </div>
+      </div>
+      <button class="btn-soft" id="resumeBtn" title="Restore the last saved reading session">
+        Resume
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel side">
+      <div class="tabs">
+        <button class="tab active" id="urlTab">URL</button>
+        <button class="tab" id="pasteTab">Paste</button>
+      </div>
+
+      <section id="urlMode">
+        <label for="urlInput">Webpage URL</label>
+        <input id="urlInput" type="url" placeholder="https://example.com/article" />
+        <div class="btn-row">
+          <button id="loadUrlBtn">Load URL</button>
+          <button class="btn-soft" id="demoBtn">Load Demo</button>
+        </div>
+        <div class="hint">
+          Browser security may block direct page loading. If that happens, use paste mode or a CORS-enabled source.
+        </div>
+      </section>
+
+      <section id="pasteMode" class="hidden">
+        <label for="titleInput">Optional title</label>
+        <input id="titleInput" type="text" placeholder="Document title" />
+
+        <label for="pasteInput">Text / article content</label>
+        <textarea id="pasteInput" placeholder="Paste text here..."></textarea>
+
+        <div class="btn-row">
+          <button id="loadPasteBtn">Load Text</button>
+        </div>
+      </section>
+
+      <div id="status" class="status">
+        Ready.
+      </div>
+
+      <div class="mode-box">
+        <label for="selectionMode">Selection mode</label>
+        <select id="selectionMode">
+          <option value="paragraph">Paragraph click selection</option>
+          <option value="text">Native text selection</option>
+          <option value="slider">Start/end sliders</option>
+          <option value="headings">Skim mode: headings only</option>
+        </select>
+
+        <div class="hint">
+          Paragraph mode: click once for start, click again for end.
+        </div>
+
+        <div class="range-controls" id="sliderRangeBox">
+          <div class="range-grid">
+            <div>
+              <label for="startRange">Start block</label>
+              <input type="range" id="startRange" min="0" max="0" value="0" />
+              <div class="small-value" id="startValue">0</div>
+            </div>
+            <div>
+              <label for="endRange">End block</label>
+              <input type="range" id="endRange" min="0" max="0" value="0" />
+              <div class="small-value" id="endValue">0</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn-soft" id="selectAllBtn">Select All</button>
+          <button class="btn-soft" id="clearSelectionBtn">Clear</button>
+        </div>
+
+        <div class="chip-row">
+          <span class="chip">Space: Play/Pause</span>
+          <span class="chip">← / →: Sentence skip</span>
+          <span class="chip">Esc: Stop</span>
+        </div>
+      </div>
+
+      <div class="mode-box">
+        <label for="voiceSelect">Voice</label>
+        <select id="voiceSelect"></select>
+
+        <label for="rateRange">Speed: <span id="rateValue">1.0x</span></label>
+        <input id="rateRange" type="range" min="0.5" max="3" step="0.1" value="1" />
+
+        <label for="pitchRange">Pitch: <span id="pitchValue">1.0</span></label>
+        <input id="pitchRange" type="range" min="0.5" max="2" step="0.1" value="1" />
+
+        <label for="volumeRange">Volume: <span id="volumeValue">1.0</span></label>
+        <input id="volumeRange" type="range" min="0" max="1" step="0.05" value="1" />
+
+        <label>
+          <input type="checkbox" id="speedRampToggle" />
+          Gradually increase speed while reading
+        </label>
+      </div>
+
+      <div class="footer-note">
+        Uses the browser Web Speech API. Chrome/Edge usually provide the most reliable voice support.
+      </div>
+    </aside>
+
+    <section class="panel reader">
+      <article>
+        <h2 id="articleTitle">No document loaded</h2>
+        <div id="articleMeta">Load a URL, paste text, or use the demo document.</div>
+        <div id="content" class="reader-empty">
+          The selected document will appear here. You can then select a range graphically and start playback.
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <section class="control-bar">
+    <div class="control-grid">
+      <div class="play-buttons">
+        <button id="playBtn">Play</button>
+        <button class="btn-soft" id="pauseBtn">Pause</button>
+        <button class="btn-danger" id="stopBtn">Stop</button>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="progress-top">
+          <span id="rangeInfo">No range selected.</span>
+          <span id="timeInfo">0 / 0 sentences</span>
+        </div>
+        <div class="progress" id="progress">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </div>
+
+      <div class="compact-controls">
+        <button class="btn-soft" id="prevBtn">Previous</button>
+        <button class="btn-soft" id="nextBtn">Next</button>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const els = {
+      urlTab: document.getElementById("urlTab"),
+      pasteTab: document.getElementById("pasteTab"),
+      urlMode: document.getElementById("urlMode"),
+      pasteMode: document.getElementById("pasteMode"),
+      urlInput: document.getElementById("urlInput"),
+      titleInput: document.getElementById("titleInput"),
+      pasteInput: document.getElementById("pasteInput"),
+      loadUrlBtn: document.getElementById("loadUrlBtn"),
+      loadPasteBtn: document.getElementById("loadPasteBtn"),
+      demoBtn: document.getElementById("demoBtn"),
+      resumeBtn: document.getElementById("resumeBtn"),
+      status: document.getElementById("status"),
+      articleTitle: document.getElementById("articleTitle"),
+      articleMeta: document.getElementById("articleMeta"),
+      content: document.getElementById("content"),
+      selectionMode: document.getElementById("selectionMode"),
+      startRange: document.getElementById("startRange"),
+      endRange: document.getElementById("endRange"),
+      startValue: document.getElementById("startValue"),
+      endValue: document.getElementById("endValue"),
+      selectAllBtn: document.getElementById("selectAllBtn"),
+      clearSelectionBtn: document.getElementById("clearSelectionBtn"),
+      voiceSelect: document.getElementById("voiceSelect"),
+      rateRange: document.getElementById("rateRange"),
+      pitchRange: document.getElementById("pitchRange"),
+      volumeRange: document.getElementById("volumeRange"),
+      rateValue: document.getElementById("rateValue"),
+      pitchValue: document.getElementById("pitchValue"),
+      volumeValue: document.getElementById("volumeValue"),
+      speedRampToggle: document.getElementById("speedRampToggle"),
+      playBtn: document.getElementById("playBtn"),
+      pauseBtn: document.getElementById("pauseBtn"),
+      stopBtn: document.getElementById("stopBtn"),
+      prevBtn: document.getElementById("prevBtn"),
+      nextBtn: document.getElementById("nextBtn"),
+      progress: document.getElementById("progress"),
+      progressFill: document.getElementById("progressFill"),
+      rangeInfo: document.getElementById("rangeInfo"),
+      timeInfo: document.getElementById("timeInfo")
+    };
+
+    const state = {
+      title: "",
+      source: "",
+      blocks: [],
+      startBlock: null,
+      endBlock: null,
+      sentences: [],
+      currentSentenceIndex: 0,
+      isPaused: false,
+      isReading: false,
+      voices: [],
+      selectionAnchor: null
+    };
+
+    const STORAGE_KEY = "readableVoiceRangeReader.session.v1";
+
+    function setStatus(message, type = "") {
+      els.status.className = "status" + (type ? " " + type : "");
+      els.status.textContent = message;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      }[char]));
+    }
+
+    function normalizeText(text) {
+      return text
+        .replace(/\r/g, "")
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    }
+
+    function splitIntoBlocks(text) {
+      const clean = normalizeText(text);
+      if (!clean) return [];
+
+      return clean
+        .split(/\n\s*\n/)
+        .map(x => x.trim())
+        .filter(Boolean)
+        .map(block => {
+          const isHeading =
+            block.length < 90 &&
+            !/[.!?]$/.test(block) &&
+            block.split(/\s+/).length <= 12;
+
+          return {
+            type: isHeading ? "h2" : "p",
+            text: block
+          };
+        });
+    }
+
+    function sentenceSplit(text) {
+      return text
+        .replace(/\s+/g, " ")
+        .split(/(?<=[.!?])\s+(?=[A-Z0-9"“])/)
+        .map(s => s.trim())
+        .filter(Boolean);
+    }
+
+    function estimateReadingTime(text) {
+      const words = text.trim().split(/\s+/).filter(Boolean).length;
+      const minutes = Math.max(1, Math.round(words / 180));
+      return `${words} words · about ${minutes} min`;
+    }
+
+    function renderDocument(title, blocks, source = "") {
+      state.title = title || "Untitled document";
+      state.blocks = blocks;
+      state.source = source;
+      state.startBlock = blocks.length ? 0 : null;
+      state.endBlock = blocks.length ? blocks.length - 1 : null;
+      state.currentSentenceIndex = 0;
+      state.selectionAnchor = null;
+
+      els.articleTitle.textContent = state.title;
+      els.articleMeta.textContent = `${source || "Local text"} · ${estimateReadingTime(blocks.map(b => b.text).join(" "))}`;
+
+      els.content.classList.remove("reader-empty");
+      els.content.innerHTML = "";
+
+      blocks.forEach((block, index) => {
+        const node = document.createElement(block.type === "h2" ? "h2" : "p");
+        node.className = "selectable-block";
+        node.dataset.index = index;
+        node.textContent = block.text;
+        node.addEventListener("click", () => handleBlockClick(index));
+        els.content.appendChild(node);
+      });
+
+      configureSliders();
+      updateSelectionVisuals();
+      rebuildSentences();
+      saveSession();
+      setStatus(`Loaded ${blocks.length} readable blocks.`);
+    }
+
+    function configureSliders() {
+      const max = Math.max(0, state.blocks.length - 1);
+      els.startRange.max = String(max);
+      els.endRange.max = String(max);
+      els.startRange.value = String(state.startBlock ?? 0);
+      els.endRange.value = String(state.endBlock ?? max);
+      updateSliderLabels();
+    }
+
+    function updateSliderLabels() {
+      els.startValue.textContent = `Block ${Number(els.startRange.value) + 1}`;
+      els.endValue.textContent = `Block ${Number(els.endRange.value) + 1}`;
+    }
+
+    function handleBlockClick(index) {
+      const mode = els.selectionMode.value;
+
+      if (mode !== "paragraph") return;
+
+      if (state.selectionAnchor === null) {
+        state.selectionAnchor = index;
+        state.startBlock = index;
+        state.endBlock = index;
+      } else {
+        state.startBlock = Math.min(state.selectionAnchor, index);
+        state.endBlock = Math.max(state.selectionAnchor, index);
+        state.selectionAnchor = null;
+      }
+
+      updateSelectionVisuals();
+      rebuildSentences();
+      saveSession();
+    }
+
+    function updateSelectionVisuals() {
+      const nodes = els.content.querySelectorAll(".selectable-block");
+
+      nodes.forEach(node => {
+        const index = Number(node.dataset.index);
+        node.classList.toggle(
+          "selected-range",
+          state.startBlock !== null &&
+          state.endBlock !== null &&
+          index >= state.startBlock &&
+          index <= state.endBlock
+        );
+        node.classList.remove("current-sentence");
+      });
+
+      const selectedCount =
+        state.startBlock === null || state.endBlock === null
+          ? 0
+          : state.endBlock - state.startBlock + 1;
+
+      els.rangeInfo.textContent = selectedCount
+        ? `Selected blocks ${state.startBlock + 1}–${state.endBlock + 1}`
+        : "No range selected.";
+
+      if (state.startBlock !== null) els.startRange.value = String(state.startBlock);
+      if (state.endBlock !== null) els.endRange.value = String(state.endBlock);
+      updateSliderLabels();
+    }
+
+    function getSelectedText() {
+      if (!state.blocks.length) return "";
+
+      const mode = els.selectionMode.value;
+
+      if (mode === "headings") {
+        return state.blocks
+          .filter(b => b.type === "h2")
+          .map(b => b.text)
+          .join(". ");
+      }
+
+      if (mode === "text") {
+        const selected = window.getSelection().toString().trim();
+        if (selected) return selected;
+      }
+
+      if (state.startBlock === null || state.endBlock === null) return "";
+
+      return state.blocks
+        .slice(state.startBlock, state.endBlock + 1)
+        .map(b => b.text)
+        .join("\n\n");
+    }
+
+    function rebuildSentences() {
+      const selectedText = getSelectedText();
+      state.sentences = sentenceSplit(selectedText);
+      state.currentSentenceIndex = Math.min(state.currentSentenceIndex, Math.max(0, state.sentences.length - 1));
+      updateProgress();
+    }
+
+    function updateProgress() {
+      const total = state.sentences.length;
+      const current = total ? state.currentSentenceIndex + 1 : 0;
+      const pct = total ? (state.currentSentenceIndex / total) * 100 : 0;
+
+      els.progressFill.style.width = `${pct}%`;
+      els.timeInfo.textContent = `${current} / ${total} sentences`;
+    }
+
+    function clearCurrentHighlights() {
+      els.content.querySelectorAll(".current-sentence").forEach(node => {
+        node.classList.remove("current-sentence");
+      });
+    }
+
+    function highlightApproximateSentence(sentence) {
+      clearCurrentHighlights();
+
+      const nodes = [...els.content.querySelectorAll(".selectable-block")];
+      const normalizedSentence = sentence.slice(0, 80).toLowerCase();
+
+      const match = nodes.find(node =>
+        node.textContent.toLowerCase().includes(normalizedSentence.slice(0, 35))
+      );
+
+      if (match) {
+        match.classList.add("current-sentence");
+        match.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+
+    function populateVoices() {
+      state.voices = speechSynthesis.getVoices();
+
+      els.voiceSelect.innerHTML = "";
+
+      if (!state.voices.length) {
+        const opt = document.createElement("option");
+        opt.textContent = "Default browser voice";
+        opt.value = "";
+        els.voiceSelect.appendChild(opt);
+        return;
+      }
+
+      state.voices.forEach((voice, index) => {
+        const opt = document.createElement("option");
+        opt.value = String(index);
+        opt.textContent = `${voice.name} (${voice.lang})${voice.default ? " · default" : ""}`;
+        els.voiceSelect.appendChild(opt);
+      });
+
+      const preferred = state.voices.findIndex(v =>
+        /^en/i.test(v.lang) && /natural|premium|enhanced|google|microsoft/i.test(v.name)
+      );
+
+      if (preferred >= 0) els.voiceSelect.value = String(preferred);
+    }
+
+    function getSpeechSettings() {
+      const selectedVoice = state.voices[Number(els.voiceSelect.value)] || null;
+      const baseRate = Number(els.rateRange.value);
+      const ramp = els.speedRampToggle.checked
+        ? Math.min(0.7, state.currentSentenceIndex * 0.01)
+        : 0;
+
+      return {
+        voice: selectedVoice,
+        rate: Math.min(3, baseRate + ramp),
+        pitch: Number(els.pitchRange.value),
+        volume: Number(els.volumeRange.value)
+      };
+    }
+
+    function speakCurrentSentence() {
+      if (!state.sentences.length) {
+        setStatus("No readable range selected.", "warn");
+        return;
+      }
+
+      if (state.currentSentenceIndex >= state.sentences.length) {
+        stopReading(false);
+        setStatus("Finished reading.");
+        return;
+      }
+
+      const sentence = state.sentences[state.currentSentenceIndex];
+      const settings = getSpeechSettings();
+      const utterance = new SpeechSynthesisUtterance(sentence);
+
+      if (settings.voice) utterance.voice = settings.voice;
+      utterance.rate = settings.rate;
+      utterance.pitch = settings.pitch;
+      utterance.volume = settings.volume;
+
+      utterance.onstart = () => {
+        state.isReading = true;
+        state.isPaused = false;
+        highlightApproximateSentence(sentence);
+        updateProgress();
+        setStatus("Reading.");
+      };
+
+      utterance.onend = () => {
+        if (!state.isReading || state.isPaused) return;
+        state.currentSentenceIndex += 1;
+        updateProgress();
+        saveSession();
+        speakCurrentSentence();
+      };
+
+      utterance.onerror = () => {
+        setStatus("Speech playback failed. Try another voice or browser.", "error");
+        stopReading(false);
+      };
+
+      speechSynthesis.speak(utterance);
+    }
+
+    function playReading() {
+      rebuildSentences();
+
+      if (speechSynthesis.paused) {
+        speechSynthesis.resume();
+        state.isPaused = false;
+        state.isReading = true;
+        setStatus("Resumed.");
+        return;
+      }
+
+      speechSynthesis.cancel();
+      state.isReading = true;
+      state.isPaused = false;
+      speakCurrentSentence();
+    }
+
+    function pauseReading() {
+      if (speechSynthesis.speaking && !speechSynthesis.paused) {
+        speechSynthesis.pause();
+        state.isPaused = true;
+        setStatus("Paused.");
+      }
+    }
+
+    function stopReading(reset = true) {
+      speechSynthesis.cancel();
+      state.isReading = false;
+      state.isPaused = false;
+
+      if (reset) state.currentSentenceIndex = 0;
+
+      clearCurrentHighlights();
+      updateProgress();
+      saveSession();
+    }
+
+    function skipSentence(delta) {
+      stopReading(false);
+      state.currentSentenceIndex = Math.max(
+        0,
+        Math.min(state.sentences.length - 1, state.currentSentenceIndex + delta)
+      );
+      updateProgress();
+      saveSession();
+
+      if (state.sentences.length) {
+        highlightApproximateSentence(state.sentences[state.currentSentenceIndex]);
+      }
+    }
+
+    function saveSession() {
+      const payload = {
+        title: state.title,
+        source: state.source,
+        blocks: state.blocks,
+        startBlock: state.startBlock,
+        endBlock: state.endBlock,
+        currentSentenceIndex: state.currentSentenceIndex,
+        controls: {
+          rate: els.rateRange.value,
+          pitch: els.pitchRange.value,
+          volume: els.volumeRange.value,
+          mode: els.selectionMode.value,
+          speedRamp: els.speedRampToggle.checked
+        }
+      };
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    }
+
+    function resumeSession() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          setStatus("No saved session found.", "warn");
+          return;
+        }
+
+        const payload = JSON.parse(raw);
+        renderDocument(payload.title, payload.blocks || [], payload.source || "");
+
+        state.startBlock = payload.startBlock;
+        state.endBlock = payload.endBlock;
+        state.currentSentenceIndex = payload.currentSentenceIndex || 0;
+
+        if (payload.controls) {
+          els.rateRange.value = payload.controls.rate || "1";
+          els.pitchRange.value = payload.controls.pitch || "1";
+          els.volumeRange.value = payload.controls.volume || "1";
+          els.selectionMode.value = payload.controls.mode || "paragraph";
+          els.speedRampToggle.checked = Boolean(payload.controls.speedRamp);
+          updateControlLabels();
+        }
+
+        updateSelectionVisuals();
+        rebuildSentences();
+        setStatus("Session restored.");
+      } catch {
+        setStatus("Saved session could not be restored.", "error");
+      }
+    }
+
+    function updateControlLabels() {
+      els.rateValue.textContent = `${Number(els.rateRange.value).toFixed(1)}x`;
+      els.pitchValue.textContent = Number(els.pitchRange.value).toFixed(1);
+      els.volumeValue.textContent = Number(els.volumeRange.value).toFixed(2);
+    }
+
+    async function loadUrl() {
+      const url = els.urlInput.value.trim();
+
+      if (!url) {
+        setStatus("Enter a URL first.", "warn");
+        return;
+      }
+
+      let parsed;
+      try {
+        parsed = new URL(url);
+      } catch {
+        setStatus("Invalid URL.", "error");
+        return;
+      }
+
+      setStatus("Loading URL...");
+
+      try {
+        const response = await fetch(parsed.href);
+        if (!response.ok) throw new Error("Fetch failed");
+
+        const html = await response.text();
+        const doc = new DOMParser().parseFromString(html, "text/html");
+
+        doc.querySelectorAll("script, style, nav, footer, aside, form, noscript").forEach(n => n.remove());
+
+        const title =
+          doc.querySelector("meta[property='og:title']")?.content ||
+          doc.querySelector("title")?.textContent ||
+          parsed.hostname;
+
+        const candidates = [
+          doc.querySelector("article"),
+          doc.querySelector("main"),
+          doc.body
+        ].filter(Boolean);
+
+        const best = candidates
+          .map(node => ({
+            node,
+            text: normalizeText(node.innerText || "")
+          }))
+          .sort((a, b) => b.text.length - a.text.length)[0];
+
+        if (!best || best.text.length < 100) {
+          throw new Error("No readable text");
+        }
+
+        renderDocument(title.trim(), splitIntoBlocks(best.text), parsed.hostname);
+      } catch {
+        setStatus(
+          "Could not load this page directly. Browser CORS/security restrictions probably blocked it. Use Paste mode.",
+          "error"
+        );
+      }
+    }
+
+    function loadPaste() {
+      const text = els.pasteInput.value.trim();
+      const title = els.titleInput.value.trim() || "Pasted document";
+
+      if (!text) {
+        setStatus("Paste text first.", "warn");
+        return;
+      }
+
+      renderDocument(title, splitIntoBlocks(text), "Pasted text");
+    }
+
+    function loadDemo() {
+      const demo = `
+Range Reading for the Web
+
+This demo shows how the app handles headings, paragraphs, visual range selection, speech controls, and session recovery.
+
+The central idea is simple. A user loads or pastes text, selects the portion they want to hear, and starts playback. The app keeps the visible document in place while the control bar stays accessible at the bottom of the screen.
+
+Paragraph selection is useful when the user wants broad control. The first click defines the start of the range. The second click defines the end of the range. The selected range is highlighted immediately.
+
+Native text selection is useful when the user wants fine-grained control. In that mode, the browser selection itself becomes the spoken text. This is best for short extracts.
+
+Slider range selection is useful for long documents. It lets the user choose the start and end blocks without dragging through the article.
+
+Skim mode reads only detected headings. This gives the user a fast overview before listening to the full document.
+
+The speech engine uses the browser Web Speech API. Available voices depend on the operating system and browser. Chrome and Edge usually provide the most predictable results.
+
+The app also stores the last document, selected range, playback position, and speech settings locally in the browser. No account or backend is required.
+      `;
+
+      renderDocument("Demo Document", splitIntoBlocks(demo), "Built-in demo");
+    }
+
+    function setTab(mode) {
+      const useUrl = mode === "url";
+
+      els.urlTab.classList.toggle("active", useUrl);
+      els.pasteTab.classList.toggle("active", !useUrl);
+      els.urlMode.classList.toggle("hidden", !useUrl);
+      els.pasteMode.classList.toggle("hidden", useUrl);
+    }
+
+    els.urlTab.addEventListener("click", () => setTab("url"));
+    els.pasteTab.addEventListener("click", () => setTab("paste"));
+
+    els.loadUrlBtn.addEventListener("click", loadUrl);
+    els.loadPasteBtn.addEventListener("click", loadPaste);
+    els.demoBtn.addEventListener("click", loadDemo);
+    els.resumeBtn.addEventListener("click", resumeSession);
+
+    els.selectionMode.addEventListener("change", () => {
+      rebuildSentences();
+      updateSelectionVisuals();
+      saveSession();
+    });
+
+    els.startRange.addEventListener("input", () => {
+      state.startBlock = Math.min(Number(els.startRange.value), Number(els.endRange.value));
+      els.startRange.value = String(state.startBlock);
+      updateSelectionVisuals();
+      rebuildSentences();
+      saveSession();
+    });
+
+    els.endRange.addEventListener("input", () => {
+      state.endBlock = Math.max(Number(els.endRange.value), Number(els.startRange.value));
+      els.endRange.value = String(state.endBlock);
+      updateSelectionVisuals();
+      rebuildSentences();
+      saveSession();
+    });
+
+    els.selectAllBtn.addEventListener("click", () => {
+      if (!state.blocks.length) return;
+      state.startBlock = 0;
+      state.endBlock = state.blocks.length - 1;
+      state.selectionAnchor = null;
+      updateSelectionVisuals();
+      rebuildSentences();
+      saveSession();
+    });
+
+    els.clearSelectionBtn.addEventListener("click", () => {
+      state.startBlock = null;
+      state.endBlock = null;
+      state.selectionAnchor = null;
+      state.sentences = [];
+      updateSelectionVisuals();
+      updateProgress();
+      saveSession();
+    });
+
+    els.rateRange.addEventListener("input", () => {
+      updateControlLabels();
+      saveSession();
+    });
+
+    els.pitchRange.addEventListener("input", () => {
+      updateControlLabels();
+      saveSession();
+    });
+
+    els.volumeRange.addEventListener("input", () => {
+      updateControlLabels();
+      saveSession();
+    });
+
+    els.speedRampToggle.addEventListener("change", saveSession);
+
+    els.playBtn.addEventListener("click", playReading);
+    els.pauseBtn.addEventListener("click", pauseReading);
+    els.stopBtn.addEventListener("click", () => stopReading(true));
+    els.prevBtn.addEventListener("click", () => skipSentence(-1));
+    els.nextBtn.addEventListener("click", () => skipSentence(1));
+
+    els.progress.addEventListener("click", event => {
+      if (!state.sentences.length) return;
+
+      const rect = els.progress.getBoundingClientRect();
+      const ratio = (event.clientX - rect.left) / rect.width;
+      state.currentSentenceIndex = Math.max(
+        0,
+        Math.min(state.sentences.length - 1, Math.floor(ratio * state.sentences.length))
+      );
+
+      updateProgress();
+      saveSession();
+
+      if (state.sentences[state.currentSentenceIndex]) {
+        highlightApproximateSentence(state.sentences[state.currentSentenceIndex]);
+      }
+    });
+
+    document.addEventListener("keydown", event => {
+      const active = document.activeElement;
+      const typing = active && ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName);
+
+      if (typing) return;
+
+      if (event.code === "Space") {
+        event.preventDefault();
+        if (state.isReading && !state.isPaused) pauseReading();
+        else playReading();
+      }
+
+      if (event.key === "ArrowRight") skipSentence(1);
+      if (event.key === "ArrowLeft") skipSentence(-1);
+      if (event.key === "Escape") stopReading(true);
+    });
+
+    speechSynthesis.onvoiceschanged = populateVoices;
+
+    populateVoices();
+    updateControlLabels();
+    loadDemo();
+  </script>
+</body>
+</html>
