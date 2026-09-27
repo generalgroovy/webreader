@@ -1,0 +1,61 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const vm = require('node:vm');
+const html = readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+const key = 'readableVoiceRangeReader.session.v1';
+const saved = { title: 'My document', source: 'Pasted text', blocks: [{type:'p',text:'First sentence. Second sentence.'}], startBlock:0,endBlock:0,currentSentenceIndex:1,controls:{rate:'1.2',pitch:'1',volume:'0',mode:'paragraph'} };
+
+function reader(payload, blocked = false) {
+  const storage = new Map(payload ? [[key, JSON.stringify(payload)]] : []);
+  const elements = new Map();
+  const create = () => ({ value:'1', checked:false, style:{}, dataset:{}, children:[], textContent:'',
+    classList:{add(){},remove(){},toggle(){}}, addEventListener(type, fn){this[type]=fn;},
+    appendChild(node){this.children.push(node);},querySelectorAll(){return [];},scrollIntoView(){} });
+  const speech = {speaking:false,paused:false,queue:[],getVoices:()=>[],cancel(){},speak(u){this.queue.push(u);},resume(){},pause(){}};
+  const context = vm.createContext({ document:{ getElementById(id){ if(!elements.has(id))elements.set(id,create()); return elements.get(id);},createElement:create,addEventListener(){} },
+    speechSynthesis:speech,SpeechSynthesisUtterance:function(text){this.text=text;},
+    localStorage:{getItem(k){if(blocked)throw Error('blocked');return storage.get(k);},setItem(k,v){if(blocked)throw Error('full');storage.set(k,v);}},
+    window:{getSelection:()=>({toString:()=>''})},console });
+  elements.set('selectionMode', {...create(),value:'paragraph'});
+  vm.runInContext(script, context);
+  return {context,storage,elements,speech,run:code=>vm.runInContext(code,context)};
+}
+
+test('startup preserves the saved document and Resume restores position and muted volume',()=>{
+  const app=reader(saved);
+  assert.deepEqual(JSON.parse(app.storage.get(key)),saved);
+  app.run('resumeSession()');
+  assert.equal(app.elements.get('articleTitle').textContent,'My document');
+  assert.equal(app.run('state.currentSentenceIndex'),1);
+  assert.equal(app.elements.get('volumeRange').value,'0');
+  assert.equal(JSON.parse(app.storage.get(key)).currentSentenceIndex,1);
+});
+test('blocked storage still loads and reads the demo',()=>{
+  const app=reader(null,true);
+  assert.equal(app.elements.get('articleTitle').textContent,'Demo Document');
+  app.run('playReading()');
+  assert.ok(app.speech.queue.length);
+});
+test('callbacks from cancelled speech cannot advance or cancel the new reading',()=>{
+  const app=reader();
+  app.run('playReading()');
+  const stale=app.speech.queue.at(-1);
+  app.run('playReading()');
+  const count=app.speech.queue.length;
+  stale.onend();
+  stale.onerror();
+  assert.equal(app.speech.queue.length,count);
+  assert.equal(app.run('state.currentSentenceIndex'),0);
+  assert.equal(app.run('state.isReading'),true);
+});
+test('loading another document stops active speech before replacing its sentence queue',()=>{
+  const app=reader();
+  app.run('playReading()');
+  const stale=app.speech.queue.at(-1);
+  app.run("renderDocument('Replacement', [{type:'p',text:'New content.'}])");
+  stale.onend();
+  assert.equal(app.run('state.isReading'),false);
+  assert.equal(app.run('state.currentSentenceIndex'),0);
+});

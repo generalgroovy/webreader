@@ -652,7 +652,8 @@
       isPaused: false,
       isReading: false,
       voices: [],
-      selectionAnchor: null
+      selectionAnchor: null,
+      speechVersion: 0
     };
 
     const STORAGE_KEY = "readableVoiceRangeReader.session.v1";
@@ -715,7 +716,8 @@
       return `${words} words · about ${minutes} min`;
     }
 
-    function renderDocument(title, blocks, source = "") {
+    function renderDocument(title, blocks, source = "", persist = true) {
+      stopReading(false, false);
       state.title = title || "Untitled document";
       state.blocks = blocks;
       state.source = source;
@@ -742,7 +744,7 @@
       configureSliders();
       updateSelectionVisuals();
       rebuildSentences();
-      saveSession();
+      if (persist) saveSession();
       setStatus(`Loaded ${blocks.length} readable blocks.`);
     }
 
@@ -929,6 +931,7 @@
       const sentence = state.sentences[state.currentSentenceIndex];
       const settings = getSpeechSettings();
       const utterance = new SpeechSynthesisUtterance(sentence);
+      const version = state.speechVersion;
 
       if (settings.voice) utterance.voice = settings.voice;
       utterance.rate = settings.rate;
@@ -936,6 +939,7 @@
       utterance.volume = settings.volume;
 
       utterance.onstart = () => {
+        if (version !== state.speechVersion) return;
         state.isReading = true;
         state.isPaused = false;
         highlightApproximateSentence(sentence);
@@ -944,7 +948,7 @@
       };
 
       utterance.onend = () => {
-        if (!state.isReading || state.isPaused) return;
+        if (version !== state.speechVersion || !state.isReading || state.isPaused) return;
         state.currentSentenceIndex += 1;
         updateProgress();
         saveSession();
@@ -952,6 +956,7 @@
       };
 
       utterance.onerror = () => {
+        if (version !== state.speechVersion) return;
         setStatus("Speech playback failed. Try another voice or browser.", "error");
         stopReading(false);
       };
@@ -970,6 +975,7 @@
         return;
       }
 
+      state.speechVersion += 1;
       speechSynthesis.cancel();
       state.isReading = true;
       state.isPaused = false;
@@ -984,16 +990,17 @@
       }
     }
 
-    function stopReading(reset = true) {
-      speechSynthesis.cancel();
+    function stopReading(reset = true, persist = true) {
+      state.speechVersion += 1;
       state.isReading = false;
       state.isPaused = false;
+      speechSynthesis.cancel();
 
       if (reset) state.currentSentenceIndex = 0;
 
       clearCurrentHighlights();
       updateProgress();
-      saveSession();
+      if (persist) saveSession();
     }
 
     function skipSentence(delta) {
@@ -1027,7 +1034,11 @@
         }
       };
 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      } catch {
+        // Reading remains available when browser storage is blocked or full.
+      }
     }
 
     function resumeSession() {
@@ -1039,7 +1050,7 @@
         }
 
         const payload = JSON.parse(raw);
-        renderDocument(payload.title, payload.blocks || [], payload.source || "");
+        renderDocument(payload.title, payload.blocks || [], payload.source || "", false);
 
         state.startBlock = payload.startBlock;
         state.endBlock = payload.endBlock;
@@ -1056,6 +1067,7 @@
 
         updateSelectionVisuals();
         rebuildSentences();
+        saveSession();
         setStatus("Session restored.");
       } catch {
         setStatus("Saved session could not be restored.", "error");
@@ -1212,6 +1224,7 @@ The app also stores the last document, selected range, playback position, and sp
     });
 
     els.clearSelectionBtn.addEventListener("click", () => {
+      stopReading();
       state.startBlock = null;
       state.endBlock = null;
       state.selectionAnchor = null;
@@ -1246,6 +1259,7 @@ The app also stores the last document, selected range, playback position, and sp
 
     els.progress.addEventListener("click", event => {
       if (!state.sentences.length) return;
+      stopReading(false);
 
       const rect = els.progress.getBoundingClientRect();
       const ratio = (event.clientX - rect.left) / rect.width;
@@ -1283,7 +1297,11 @@ The app also stores the last document, selected range, playback position, and sp
 
     populateVoices();
     updateControlLabels();
-    loadDemo();
+    // Preserve the previous session until the user explicitly restores it.
+    let hasSavedSession = false;
+    try { hasSavedSession = Boolean(localStorage.getItem(STORAGE_KEY)); } catch {}
+    if (hasSavedSession) setStatus("Saved session available. Select Resume to restore it.");
+    else loadDemo();
   </script>
 </body>
 </html>
