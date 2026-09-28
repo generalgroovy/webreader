@@ -14,7 +14,7 @@ function reader(payload, blocked = false) {
     classList:{add(){},remove(){},toggle(){}}, addEventListener(type, fn){this[type]=fn;},
     appendChild(node){this.children.push(node);},querySelectorAll(){return [];},scrollIntoView(){} });
   const speech = {speaking:false,paused:false,queue:[],resumeCalls:0,getVoices:()=>[],cancel(){},speak(u){this.queue.push(u);},resume(){this.paused=false;this.resumeCalls++;},pause(){this.paused=true;}};
-  const context = vm.createContext({ document:{ getElementById(id){ if(!elements.has(id))elements.set(id,create()); return elements.get(id);},createElement:create,addEventListener(){} },
+  const context = vm.createContext({ document:{ getElementById(id){ if(!elements.has(id))elements.set(id,create()); return elements.get(id);},createElement:create,addEventListener(type, fn){this[type]=fn;} },
     speechSynthesis:speech,SpeechSynthesisUtterance:function(text){this.text=text;},
     localStorage:{getItem(k){if(blocked)throw Error('blocked');return storage.get(k);},setItem(k,v){if(blocked)throw Error('full');storage.set(k,v);}},
     window:{getSelection:()=>({toString:()=>''})},console });
@@ -111,4 +111,20 @@ test('Pause then Play without changing range resumes the existing queue',()=>{
 test('Play on an empty selection does not mark the reader as active',()=>{
   const app=reader();app.run('state.startBlock=null;state.endBlock=null;playReading()');
   assert.equal(app.run('state.isReading'),false);assert.equal(app.speech.queue.length,0);
+});
+
+
+test('reader shortcuts leave focused controls, editors and modified keys to the browser',()=>{
+  const app=reader();
+  for(const active of [{tagName:'BUTTON'},{tagName:'A'},{tagName:'SUMMARY'},{tagName:'DIV',isContentEditable:true}]){
+    app.context.document.activeElement=active;
+    app.context.document.keydown({code:'Space',preventDefault(){throw Error('Control activation was intercepted');}});
+  }
+  app.context.document.activeElement={tagName:'BODY'};
+  app.context.document.keydown({code:'Space',ctrlKey:true,preventDefault(){throw Error('Modified shortcut was intercepted');}});
+  assert.equal(app.speech.queue.length,0);
+  let prevented=false;
+  app.context.document.keydown({code:'Space',preventDefault(){prevented=true;}});
+  assert.equal(prevented,true);
+  assert.equal(app.speech.queue.length,1);
 });

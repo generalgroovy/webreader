@@ -1307,9 +1307,9 @@ The app also stores the last document, selected range, playback position, and sp
 
     document.addEventListener("keydown", event => {
       const active = document.activeElement;
-      const typing = active && ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName);
+      const typing = active && (["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A", "SUMMARY"].includes(active.tagName) || active.isContentEditable);
 
-      if (typing) return;
+      if (typing || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
 
       if (event.code === "Space") {
         event.preventDefault();

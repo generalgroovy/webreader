@@ -27,7 +27,7 @@ The loaded text, block range, sentence position and speech controls are saved to
 | Left / Right | Move one sentence and stop playback |
 | Escape | Stop and return to the beginning |
 
-Shortcuts do not run while an input, text area or select is focused. Available voices and speech behavior depend on the operating system and browser. An empty or blocked voice list does not establish that audio will work on another device.
+Reading shortcuts leave focused form controls, buttons, links and editable text to their normal keyboard behavior; modified key combinations are also left to the browser. Available voices and speech behavior depend on the operating system and browser. An empty or blocked voice list does not establish that audio will work on another device.
 
 ## Run and verify
 
