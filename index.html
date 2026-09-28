@@ -838,14 +838,18 @@
 
     function rebuildSentences() {
       const selectedText = getSelectedText();
-      state.sentences = sentenceSplit(selectedText);
+      const sentences = sentenceSplit(selectedText);
+      if (sentences.join("\n") !== state.sentences.join("\n")) {
+        stopReading(true, false);
+      }
+      state.sentences = sentences;
       state.currentSentenceIndex = Math.min(state.currentSentenceIndex, Math.max(0, state.sentences.length - 1));
       updateProgress();
     }
 
     function updateProgress() {
       const total = state.sentences.length;
-      const current = total ? state.currentSentenceIndex + 1 : 0;
+      const current = total ? Math.min(total, state.currentSentenceIndex + 1) : 0;
       const pct = total ? (state.currentSentenceIndex / total) * 100 : 0;
 
       els.progressFill.style.width = `${pct}%`;
@@ -967,7 +971,13 @@
     function playReading() {
       rebuildSentences();
 
-      if (speechSynthesis.paused) {
+      if (!state.sentences.length) {
+        stopReading(false);
+        setStatus("No readable range selected.", "warn");
+        return;
+      }
+
+      if (state.isPaused && speechSynthesis.paused) {
         speechSynthesis.resume();
         state.isPaused = false;
         state.isReading = true;
@@ -977,6 +987,9 @@
 
       state.speechVersion += 1;
       speechSynthesis.cancel();
+      // cancel() clears utterances, but some browsers retain the paused flag.
+      // Resume the engine before submitting a new queue after Stop/range changes.
+      if (speechSynthesis.paused) speechSynthesis.resume();
       state.isReading = true;
       state.isPaused = false;
       speakCurrentSentence();
@@ -1018,6 +1031,9 @@
     }
 
     function saveSession() {
+      // A reload has no document until Resume is selected. Changing a control
+      // must not overwrite that saved document with the empty initial state.
+      if (!state.blocks.length) return;
       const payload = {
         title: state.title,
         source: state.source,
@@ -1050,11 +1066,21 @@
         }
 
         const payload = JSON.parse(raw);
+        if (!payload || !Array.isArray(payload.blocks) || !payload.blocks.length ||
+            !payload.blocks.every(block => block && typeof block.text === "string")) {
+          throw new Error("Invalid saved document");
+        }
         renderDocument(payload.title, payload.blocks || [], payload.source || "", false);
 
-        state.startBlock = payload.startBlock;
-        state.endBlock = payload.endBlock;
-        state.currentSentenceIndex = payload.currentSentenceIndex || 0;
+        const clampBlock = (value, fallback) => Number.isInteger(value)
+          ? Math.max(0, Math.min(state.blocks.length - 1, value)) : fallback;
+        state.startBlock = payload.startBlock === null ? null : clampBlock(payload.startBlock, 0);
+        state.endBlock = payload.endBlock === null ? null : clampBlock(payload.endBlock, state.blocks.length - 1);
+        if (state.startBlock !== null && state.endBlock !== null && state.startBlock > state.endBlock) {
+          [state.startBlock, state.endBlock] = [state.endBlock, state.startBlock];
+        }
+        state.currentSentenceIndex = Number.isInteger(payload.currentSentenceIndex)
+          ? Math.max(0, payload.currentSentenceIndex) : 0;
 
         if (payload.controls) {
           els.rateRange.value = payload.controls.rate || "1";
@@ -1066,7 +1092,10 @@
         }
 
         updateSelectionVisuals();
+        const restoredPosition = state.currentSentenceIndex;
         rebuildSentences();
+        state.currentSentenceIndex = Math.min(restoredPosition, Math.max(0, state.sentences.length - 1));
+        updateProgress();
         saveSession();
         setStatus("Session restored.");
       } catch {

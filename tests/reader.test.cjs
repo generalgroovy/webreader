@@ -13,7 +13,7 @@ function reader(payload, blocked = false) {
   const create = () => ({ value:'1', checked:false, style:{}, dataset:{}, children:[], textContent:'',
     classList:{add(){},remove(){},toggle(){}}, addEventListener(type, fn){this[type]=fn;},
     appendChild(node){this.children.push(node);},querySelectorAll(){return [];},scrollIntoView(){} });
-  const speech = {speaking:false,paused:false,queue:[],getVoices:()=>[],cancel(){},speak(u){this.queue.push(u);},resume(){},pause(){}};
+  const speech = {speaking:false,paused:false,queue:[],resumeCalls:0,getVoices:()=>[],cancel(){},speak(u){this.queue.push(u);},resume(){this.paused=false;this.resumeCalls++;},pause(){this.paused=true;}};
   const context = vm.createContext({ document:{ getElementById(id){ if(!elements.has(id))elements.set(id,create()); return elements.get(id);},createElement:create,addEventListener(){} },
     speechSynthesis:speech,SpeechSynthesisUtterance:function(text){this.text=text;},
     localStorage:{getItem(k){if(blocked)throw Error('blocked');return storage.get(k);},setItem(k,v){if(blocked)throw Error('full');storage.set(k,v);}},
@@ -58,4 +58,57 @@ test('loading another document stops active speech before replacing its sentence
   stale.onend();
   assert.equal(app.run('state.isReading'),false);
   assert.equal(app.run('state.currentSentenceIndex'),0);
+});
+test('changing a control before Resume cannot erase the stored document',()=>{
+  const app=reader(saved);
+  app.elements.get('rateRange').value='1.5';
+  app.elements.get('rateRange').input();
+  assert.deepEqual(JSON.parse(app.storage.get(key)),saved);
+});
+test('selecting a different range stops speech and ignores the old completion callback',()=>{
+  const app=reader();
+  app.run('playReading()');
+  const stale=app.speech.queue.at(-1);
+  app.run('state.startBlock=2; state.endBlock=2; rebuildSentences()');
+  stale.onend();
+  assert.equal(app.run('state.isReading'),false);
+  assert.equal(app.run('state.currentSentenceIndex'),0);
+});
+test('malformed restore is rejected without replacing the active document',()=>{
+  const app=reader();
+  app.storage.set(key,JSON.stringify({blocks:[null]}));
+  app.run('resumeSession()');
+  assert.equal(app.elements.get('articleTitle').textContent,'Demo Document');
+  assert.match(app.elements.get('status').textContent,/could not be restored/);
+});
+test('restored ranges and sentence positions stay within the document',()=>{
+  const app=reader({...saved,startBlock:-50,endBlock:999,currentSentenceIndex:999});
+  app.run('resumeSession()');
+  assert.equal(app.run('state.startBlock'),0);
+  assert.equal(app.run('state.endBlock'),0);
+  assert.equal(app.run('state.currentSentenceIndex'),1);
+});
+test('changing range while paused resumes the engine and submits a new utterance',()=>{
+  const app=reader();app.run('playReading()');app.speech.speaking=true;
+  app.run('pauseReading()');assert.equal(app.speech.paused,true);
+  app.run('state.startBlock=2;state.endBlock=2;rebuildSentences();playReading()');
+  assert.equal(app.speech.paused,false);assert.equal(app.speech.resumeCalls,1);
+  assert.equal(app.speech.queue.length,2);
+  assert.match(app.speech.queue.at(-1).text,/central idea/);
+});
+test('Stop while paused starts a fresh queue on the next Play',()=>{
+  const app=reader();app.run('playReading()');app.speech.speaking=true;
+  app.run('pauseReading();stopReading();playReading()');
+  assert.equal(app.speech.paused,false);assert.equal(app.speech.queue.length,2);
+  assert.equal(app.run('state.isReading'),true);
+});
+test('Pause then Play without changing range resumes the existing queue',()=>{
+  const app=reader();app.run('playReading()');app.speech.speaking=true;
+  app.run('pauseReading();playReading()');
+  assert.equal(app.speech.paused,false);assert.equal(app.speech.queue.length,1);
+  assert.equal(app.run('state.isPaused'),false);
+});
+test('Play on an empty selection does not mark the reader as active',()=>{
+  const app=reader();app.run('state.startBlock=null;state.endBlock=null;playReading()');
+  assert.equal(app.run('state.isReading'),false);assert.equal(app.speech.queue.length,0);
 });
