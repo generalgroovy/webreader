@@ -113,6 +113,34 @@ test('Play on an empty selection does not mark the reader as active',()=>{
   assert.equal(app.run('state.isReading'),false);assert.equal(app.speech.queue.length,0);
 });
 
+test('playback labels and disabled actions follow pause, resume, and stop',()=>{
+  const app=reader();
+  app.run('playReading()');app.speech.speaking=true;
+  assert.equal(app.elements.get('pauseBtn').disabled,false);
+  app.run('pauseReading()');
+  assert.equal(app.elements.get('playBtn').textContent,'Resume');
+  assert.equal(app.elements.get('pauseBtn').disabled,true);
+  app.run('playReading()');
+  assert.equal(app.elements.get('playBtn').textContent,'Play');
+  app.run('stopReading()');
+  assert.equal(app.elements.get('pauseBtn').disabled,true);
+  assert.equal(app.elements.get('stopBtn').disabled,true);
+});
+
+test('read view preserves the document and exposes a reversible controls action',()=>{
+  const app=reader(),classes=new Set();let focused=0;
+  app.context.document.body={classList:{toggle(k,v){if(v)classes.add(k);else classes.delete(k);}}};
+  app.elements.get('focusReader').setAttribute=function(k,v){this[k]=v;};
+  app.elements.get('articleTitle').focus=()=>focused++;
+  const title=app.elements.get('articleTitle').textContent;
+  app.run('setReaderFocus(true)');
+  assert.ok(classes.has('reading-focus'));assert.equal(focused,1);
+  assert.equal(app.elements.get('focusReader').textContent,'Show controls');
+  app.run('setReaderFocus(false)');
+  assert.equal(classes.has('reading-focus'),false);
+  assert.equal(app.elements.get('articleTitle').textContent,title);
+});
+
 
 test('reader shortcuts leave focused controls, editors and modified keys to the browser',()=>{
   const app=reader();

@@ -445,6 +445,15 @@
       font-size: 0.78rem;
       color: var(--muted);
     }
+      summary { cursor:pointer; padding:10px 0; font-weight:650; }
+    .document-tools > summary { padding-top:0; }
+    .reading-focus .side { display:none; }
+    .reading-focus .layout { grid-template-columns:minmax(0,1fr); max-width:860px; }
+    .header-inner { flex-wrap:wrap; }
+    .header-inner > div { margin-right:auto; }
+    .footer-note p { line-height:1.6; }
+    #articleTitle:focus { outline:2px solid var(--accent); outline-offset:6px; }
+    @media(max-width:760px) { header { padding:12px 0; } h1 { font-size:1.3rem; } .layout { gap:12px; } .header-inner { gap:8px; } }
   </style>
 </head>
 
@@ -452,19 +461,19 @@
   <header>
     <div class="header-inner">
       <div>
-        <h1>Readable Voice Range Reader</h1>
-        <div class="subtitle">
-          Load text from a URL or paste content, select a reading range visually, then listen with configurable speech.
-        </div>
+        <h1>Webreader</h1>
+
       </div>
+      <button class="btn-soft" id="focusReader" aria-pressed="false" aria-controls="readerSettings">Read view</button>
       <button class="btn-soft" id="resumeBtn" title="Restore the last saved reading session">
-        Resume
+        Restore session
       </button>
     </div>
   </header>
 
   <main class="layout">
-    <aside class="panel side">
+    <aside class="panel side" id="readerSettings">
+      <details class="document-tools" open><summary>Document</summary>
       <div class="tabs">
         <button class="tab active" id="urlTab">URL</button>
         <button class="tab" id="pasteTab">Paste</button>
@@ -477,9 +486,7 @@
           <button id="loadUrlBtn">Load URL</button>
           <button class="btn-soft" id="demoBtn">Load Demo</button>
         </div>
-        <div class="hint">
-          Browser security may block direct page loading. If that happens, use paste mode or a CORS-enabled source.
-        </div>
+
       </section>
 
       <section id="pasteMode" class="hidden">
@@ -494,11 +501,12 @@
         </div>
       </section>
 
-      <div id="status" class="status">
+      </details>
+      <div id="status" class="status" role="status">
         Ready.
       </div>
 
-      <div class="mode-box">
+      <details class="mode-box"><summary>Range</summary>
         <label for="selectionMode">Selection mode</label>
         <select id="selectionMode">
           <option value="paragraph">Paragraph click selection</option>
@@ -531,12 +539,7 @@
           <button class="btn-soft" id="clearSelectionBtn">Clear</button>
         </div>
 
-        <div class="chip-row">
-          <span class="chip">Space: Play/Pause</span>
-          <span class="chip">← / →: Sentence skip</span>
-          <span class="chip">Esc: Stop</span>
-        </div>
-      </div>
+      </details>
 
       <div class="mode-box">
         <label for="voiceSelect">Voice</label>
@@ -545,6 +548,7 @@
         <label for="rateRange">Speed: <span id="rateValue">1.0x</span></label>
         <input id="rateRange" type="range" min="0.5" max="3" step="0.1" value="1" />
 
+        <details><summary>Voice options</summary>
         <label for="pitchRange">Pitch: <span id="pitchValue">1.0</span></label>
         <input id="pitchRange" type="range" min="0.5" max="2" step="0.1" value="1" />
 
@@ -554,20 +558,18 @@
         <label>
           <input type="checkbox" id="speedRampToggle" />
           Gradually increase speed while reading
-        </label>
+        </label></details>
       </div>
 
-      <div class="footer-note">
-        Uses the browser Web Speech API. Chrome/Edge usually provide the most reliable voice support.
-      </div>
+      <details class="footer-note"><summary>Info</summary><p>Paste text or load a webpage. URL loading requires the source site to permit cross-origin access; paste the text if it fails.</p><p>Range: click a first and last paragraph, or use the sliders. Play reads the selection. Stop returns to its beginning.</p><p>Space: play/pause · ←/→: previous/next sentence · Escape: stop. Shortcuts leave focused controls to their native behavior.</p><p>Restore session retrieves this browser's last saved text and position. Storage may be cleared by browser settings. Voices depend on your browser and operating system.</p></details>
     </aside>
 
     <section class="panel reader">
       <article>
-        <h2 id="articleTitle">No document loaded</h2>
+        <h2 id="articleTitle" tabindex="-1">No document loaded</h2>
         <div id="articleMeta">Load a URL, paste text, or use the demo document.</div>
         <div id="content" class="reader-empty">
-          The selected document will appear here. You can then select a range graphically and start playback.
+          Paste text to begin.
         </div>
       </article>
     </section>
@@ -657,6 +659,14 @@
     };
 
     const STORAGE_KEY = "readableVoiceRangeReader.session.v1";
+
+    function setReaderFocus(focused) {
+      document.body.classList.toggle('reading-focus', focused);
+      const button = document.getElementById('focusReader');
+      button.textContent = focused ? 'Show controls' : 'Read view';
+      button.setAttribute('aria-pressed', String(focused));
+      if (focused) els.articleTitle.focus();
+    }
 
     function setStatus(message, type = "") {
       els.status.className = "status" + (type ? " " + type : "");
@@ -848,6 +858,10 @@
     }
 
     function updateProgress() {
+      els.playBtn.textContent = state.isPaused ? 'Resume' : 'Play';
+      els.pauseBtn.disabled = !state.isReading || state.isPaused;
+      els.stopBtn.disabled = !state.isReading && !state.isPaused && state.currentSentenceIndex === 0;
+
       const total = state.sentences.length;
       const current = total ? Math.min(total, state.currentSentenceIndex + 1) : 0;
       const pct = total ? (state.currentSentenceIndex / total) * 100 : 0;
@@ -982,6 +996,7 @@
         state.isPaused = false;
         state.isReading = true;
         setStatus("Resumed.");
+        updateProgress();
         return;
       }
 
@@ -992,6 +1007,7 @@
       if (speechSynthesis.paused) speechSynthesis.resume();
       state.isReading = true;
       state.isPaused = false;
+      updateProgress();
       speakCurrentSentence();
     }
 
@@ -1000,6 +1016,7 @@
         speechSynthesis.pause();
         state.isPaused = true;
         setStatus("Paused.");
+        updateProgress();
       }
     }
 
@@ -1219,6 +1236,7 @@ The app also stores the last document, selected range, playback position, and sp
     els.loadPasteBtn.addEventListener("click", loadPaste);
     els.demoBtn.addEventListener("click", loadDemo);
     els.resumeBtn.addEventListener("click", resumeSession);
+    document.getElementById('focusReader').addEventListener('click', () => setReaderFocus(!document.body.classList.contains('reading-focus')));
 
     els.selectionMode.addEventListener("change", () => {
       rebuildSentences();
@@ -1329,8 +1347,9 @@ The app also stores the last document, selected range, playback position, and sp
     // Preserve the previous session until the user explicitly restores it.
     let hasSavedSession = false;
     try { hasSavedSession = Boolean(localStorage.getItem(STORAGE_KEY)); } catch {}
-    if (hasSavedSession) setStatus("Saved session available. Select Resume to restore it.");
+    if (hasSavedSession) setStatus("Saved session available. Select Restore session.");
     else loadDemo();
+    setTab("paste");
   </script>
 </body>
 </html>

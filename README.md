@@ -4,10 +4,10 @@
 
 ## Start reading
 
-1. Choose **Paste**, enter a title and text, then **Load Text**. **Load Demo** provides a sample.
-2. Select the range: click its first and last paragraphs, use the start/end sliders, highlight text in **Native text selection** mode, or choose **Skim mode** for detected headings.
-3. Choose a voice, speed, pitch and volume, then **Play**. **Pause** preserves the current utterance; **Stop** returns to the beginning of the selected range.
-4. **Previous**, **Next** and the progress bar move the reading position and stop playback. Press **Play** to continue from there.
+1. **Paste** is selected initially; enter a title and text, then **Load Text**. **Load Demo** provides a sample.
+2. Open **Range** to select the range: click its first and last paragraphs, use the start/end sliders, highlight text in **Native text selection** mode, or choose **Skim mode** for detected headings.
+3. Choose a voice and speed, then **Play**. Pitch, volume and speed ramp live under **Voice options**. **Pause** preserves the current utterance and changes Play to **Resume**; **Stop** returns to the beginning of the selected range.
+4. **Read view** hides setup controls and focuses the document; **Show controls** restores them. **Previous**, **Next** and the progress bar move the reading position and stop playback. Press **Play** to continue from there.
 
 Changing the selected text stops the old speech before building the new sentence queue. Headings are detected heuristically from short blocks; they are not a semantic document outline.
 
@@ -17,7 +17,7 @@ Enter a URL and choose **Load URL**. The remote server must permit browser cross
 
 ## Saved state
 
-The loaded text, block range, sentence position and speech controls are saved to this browser's local storage. On a later visit choose **Resume**; changing a control before restoring will not erase the saved text. Storage is specific to the site/browser, can be cleared by browser settings, and is not a backup or cross-device sync. Reading remains available when storage is blocked or full, but persistence is then unavailable. There is no file import/export feature.
+The loaded text, block range, sentence position and speech controls are saved to this browser's local storage. On a later visit choose **Restore session**; changing a control before restoring will not erase the saved text. Storage is specific to the site/browser, can be cleared by browser settings, and is not a backup or cross-device sync. Reading remains available when storage is blocked or full, but persistence is then unavailable. There is no file import/export feature.
 
 ## Keyboard
 
@@ -39,4 +39,4 @@ With Node.js 18 or newer:
 node --test tests/reader.test.cjs
 ```
 
-Tests cover session restoration, storage failure, range changes and cancellation callbacks using browser doubles. For a real-browser check, paste two paragraphs, play/pause/stop, select another range, reload, and restore with Resume. Verify listening with the actual voice/device you intend to use; the automated suite cannot establish audible quality.
+Tests cover reversible reading focus, playback action states, session restoration, storage failure, range changes and cancellation callbacks using browser doubles. For a real-browser check, paste two paragraphs, play/pause/stop, select another range, reload, and restore with Restore session. Verify listening with the actual voice/device you intend to use; the automated suite cannot establish audible quality.
