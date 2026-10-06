@@ -48,7 +48,7 @@
       max-width: 1180px;
       margin: auto;
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: 1fr auto auto;
       gap: 18px;
       align-items: center;
     }
@@ -96,17 +96,23 @@
       align-self: start;
       position: sticky;
       top: 115px;
+      max-height: calc(100vh - 265px);
+      overflow-y: auto;
     }
 
     @media (max-width: 900px) {
       .side {
         position: static;
+        max-height: none;
+        overflow-y: visible;
       }
     }
 
     .reader {
       min-height: 70vh;
       padding: clamp(18px, 4vw, 42px);
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     label {
@@ -163,6 +169,12 @@
     button:hover {
       transform: translateY(-1px);
     }
+
+    button, select, summary { min-height: 44px; }
+    button:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    input[type="range"] { min-height: 28px; }
+    .current-part { font-size: .84rem; margin: 2px 0; color: var(--text); }
+    .storage-note:empty { display: none; }
 
     button:disabled {
       opacity: 0.45;
@@ -304,6 +316,7 @@
     .selectable-block:hover {
       background: #f0f5ed;
     }
+    .text-selection .selectable-block { cursor: text; }
 
     .selected-range {
       background: #dcebd8 !important;
@@ -384,21 +397,6 @@
       margin-bottom: 4px;
     }
 
-    .progress {
-      height: 12px;
-      background: var(--panel-soft);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      overflow: hidden;
-      cursor: pointer;
-    }
-
-    .progress-fill {
-      height: 100%;
-      width: 0%;
-      background: var(--accent);
-    }
-
     .compact-controls {
       display: grid;
       grid-template-columns: 130px 130px;
@@ -453,7 +451,19 @@
     .header-inner > div { margin-right:auto; }
     .footer-note p { line-height:1.6; }
     #articleTitle:focus { outline:2px solid var(--accent); outline-offset:6px; }
-    @media(max-width:760px) { header { padding:12px 0; } h1 { font-size:1.3rem; } .layout { gap:12px; } .header-inner { gap:8px; } }
+    @media(max-width:760px) {
+      header { padding:12px; } h1 { font-size:1.3rem; }
+      .layout { gap:12px; margin-bottom:270px; padding:0 12px; }
+      .header-inner { grid-template-columns:1fr 1fr; gap:8px; }
+      .header-inner > div { grid-column:1 / -1; }
+      .control-grid { gap:8px; }
+      .control-bar { bottom:8px; padding:10px; }
+      .play-buttons button { flex:1; }
+      .progress-top { font-size:.82rem; }
+      .progress-top span { min-width:0; }
+      .side { padding:14px; }
+    }
+    @media(prefers-reduced-motion:reduce) { * { scroll-behavior:auto !important; transition:none !important; } }
   </style>
 </head>
 
@@ -473,7 +483,7 @@
 
   <main class="layout">
     <aside class="panel side" id="readerSettings">
-      <details class="document-tools" open><summary>Document</summary>
+      <details class="document-tools" id="documentTools" open><summary>Document</summary>
       <div class="tabs">
         <button class="tab active" id="urlTab">URL</button>
         <button class="tab" id="pasteTab">Paste</button>
@@ -484,7 +494,6 @@
         <input id="urlInput" type="url" placeholder="https://example.com/article" />
         <div class="btn-row">
           <button id="loadUrlBtn">Load URL</button>
-          <button class="btn-soft" id="demoBtn">Load Demo</button>
         </div>
 
       </section>
@@ -498,6 +507,7 @@
 
         <div class="btn-row">
           <button id="loadPasteBtn">Load Text</button>
+          <button class="btn-soft" id="demoBtn">Try example</button>
         </div>
       </section>
 
@@ -505,17 +515,18 @@
       <div id="status" class="status" role="status">
         Ready.
       </div>
+      <p id="storageStatus" class="hint storage-note" role="status"></p>
 
       <details class="mode-box"><summary>Range</summary>
         <label for="selectionMode">Selection mode</label>
         <select id="selectionMode">
-          <option value="paragraph">Paragraph click selection</option>
-          <option value="text">Native text selection</option>
-          <option value="slider">Start/end sliders</option>
-          <option value="headings">Skim mode: headings only</option>
+          <option value="paragraph">Click paragraphs</option>
+          <option value="text">Highlight text</option>
+          <option value="slider">Set first and last block</option>
+          <option value="headings">Headings only</option>
         </select>
 
-        <div class="hint">
+        <div class="hint" id="selectionHelp">
           Paragraph mode: click once for start, click again for end.
         </div>
 
@@ -541,6 +552,16 @@
 
       </details>
 
+      <details class="mode-box"><summary>Study</summary>
+        <label for="repeatCount">Read the range</label>
+        <select id="repeatCount">
+          <option value="1">Once</option><option value="2">2 times</option>
+          <option value="3">3 times</option><option value="5">5 times</option>
+        </select>
+        <label><input type="checkbox" id="pauseBetween" /> Pause after each part</label>
+        <p class="hint">Recall, translate or read along. Continue moves to the next part. Stop starts over.</p>
+      </details>
+
       <div class="mode-box">
         <label for="voiceSelect">Voice</label>
         <select id="voiceSelect"></select>
@@ -561,7 +582,7 @@
         </label></details>
       </div>
 
-      <details class="footer-note"><summary>Info</summary><p>Paste text or load a webpage. URL loading requires the source site to permit cross-origin access; paste the text if it fails.</p><p>Range: click a first and last paragraph, or use the sliders. Play reads the selection. Stop returns to its beginning.</p><p>Space: play/pause · ←/→: previous/next sentence · Escape: stop. Shortcuts leave focused controls to their native behavior.</p><p>Restore session retrieves this browser's last saved text and position. Storage may be cleared by browser settings. Voices depend on your browser and operating system.</p></details>
+      <details class="footer-note"><summary>Info</summary><p>Paste text or load a webpage. URL loading requires the source site to permit cross-origin access; paste the text if it fails.</p><p>Range: click a first and last paragraph, or use the sliders. Play reads the selection. Stop returns to its beginning. Long sentences become shorter listening parts.</p><p>Study: repeat a range or pause after each part to recall or read along. Voice and speed changes apply to the next part.</p><p>Space: play/pause · ←/→: previous/next part · Escape: stop. Shortcuts leave focused controls to their native behavior.</p><p>Restore session retrieves this browser's last saved text and position. Storage may be cleared by browser settings. Voices depend on your browser and operating system.</p></details>
     </aside>
 
     <section class="panel reader">
@@ -586,11 +607,10 @@
       <div class="progress-wrap">
         <div class="progress-top">
           <span id="rangeInfo">No range selected.</span>
-          <span id="timeInfo">0 / 0 sentences</span>
+          <span id="timeInfo">0 / 0 parts</span>
         </div>
-        <div class="progress" id="progress">
-          <div class="progress-fill" id="progressFill"></div>
-        </div>
+        <input type="range" id="progress" min="0" max="0" value="0" step="1" aria-label="Reading position" />
+        <div class="current-part" id="playbackState" role="status" aria-live="polite">Ready to read</div>
       </div>
 
       <div class="compact-controls">
@@ -603,6 +623,7 @@
   <script>
     const els = {
       urlTab: document.getElementById("urlTab"),
+      documentTools: document.getElementById("documentTools"),
       pasteTab: document.getElementById("pasteTab"),
       urlMode: document.getElementById("urlMode"),
       pasteMode: document.getElementById("pasteMode"),
@@ -614,10 +635,16 @@
       demoBtn: document.getElementById("demoBtn"),
       resumeBtn: document.getElementById("resumeBtn"),
       status: document.getElementById("status"),
+      storageStatus: document.getElementById("storageStatus"),
+      selectionHelp: document.getElementById("selectionHelp"),
+      repeatCount: document.getElementById("repeatCount"),
+      pauseBetween: document.getElementById("pauseBetween"),
+      playbackState: document.getElementById("playbackState"),
       articleTitle: document.getElementById("articleTitle"),
       articleMeta: document.getElementById("articleMeta"),
       content: document.getElementById("content"),
       selectionMode: document.getElementById("selectionMode"),
+      sliderRangeBox: document.getElementById("sliderRangeBox"),
       startRange: document.getElementById("startRange"),
       endRange: document.getElementById("endRange"),
       startValue: document.getElementById("startValue"),
@@ -638,7 +665,6 @@
       prevBtn: document.getElementById("prevBtn"),
       nextBtn: document.getElementById("nextBtn"),
       progress: document.getElementById("progress"),
-      progressFill: document.getElementById("progressFill"),
       rangeInfo: document.getElementById("rangeInfo"),
       timeInfo: document.getElementById("timeInfo")
     };
@@ -650,15 +676,30 @@
       startBlock: null,
       endBlock: null,
       sentences: [],
+      sentenceBlocks: [],
+      nativeText: "",
+      nativeParts: [],
+      queueKey: "",
       currentSentenceIndex: 0,
       isPaused: false,
       isReading: false,
+      waitingForNext: false,
+      completed: false,
+      cycle: 1,
+      pendingEnd: null,
+      activeUtterance: null,
+      voiceKey: "",
       voices: [],
       selectionAnchor: null,
-      speechVersion: 0
+      speechVersion: 0,
+      loadVersion: 0,
+      loadController: null
     };
 
     const STORAGE_KEY = "readableVoiceRangeReader.session.v1";
+    const speechAvailable = typeof speechSynthesis !== "undefined" && typeof SpeechSynthesisUtterance !== "undefined";
+    const sentenceSegmenter = typeof Intl.Segmenter === "function"
+      ? new Intl.Segmenter(undefined, { granularity: "sentence" }) : null;
 
     function setReaderFocus(focused) {
       document.body.classList.toggle('reading-focus', focused);
@@ -671,16 +712,6 @@
     function setStatus(message, type = "") {
       els.status.className = "status" + (type ? " " + type : "");
       els.status.textContent = message;
-    }
-
-    function escapeHtml(str) {
-      return str.replace(/[&<>"']/g, char => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#039;"
-      }[char]));
     }
 
     function normalizeText(text) {
@@ -702,7 +733,7 @@
         .map(block => {
           const isHeading =
             block.length < 90 &&
-            !/[.!?]$/.test(block) &&
+            !/[.!?。！？]["'”’»）)]?$/u.test(block) &&
             block.split(/\s+/).length <= 12;
 
           return {
@@ -713,11 +744,28 @@
     }
 
     function sentenceSplit(text) {
-      return text
-        .replace(/\s+/g, " ")
-        .split(/(?<=[.!?])\s+(?=[A-Z0-9"“])/)
-        .map(s => s.trim())
-        .filter(Boolean);
+      const clean = text.replace(/\s+/g, " ").trim();
+      if (!clean) return [];
+      const segments = sentenceSegmenter
+        ? [...sentenceSegmenter.segment(clean)].map(s => s.segment)
+        : clean.split(/(?<=[.!?。！？])\s*/u);
+      // Very long sentences are short listening parts. Preserve Unicode code
+      // points and prefer a word boundary; never drop unpunctuated text.
+      return segments.flatMap(segment => {
+        const points = Array.from(segment.trim());
+        const chunks = [];
+        let start = 0;
+        while (points.length - start > 500) {
+          let end = start + 500;
+          for (let i = end - 1; i >= start + 250; i--) {
+            if (/\s/u.test(points[i])) { end = i + 1; break; }
+          }
+          chunks.push(points.slice(start, end).join("").trim());
+          start = end;
+        }
+        if (start < points.length) chunks.push(points.slice(start).join("").trim());
+        return chunks.filter(Boolean);
+      });
     }
 
     function estimateReadingTime(text) {
@@ -727,6 +775,7 @@
     }
 
     function renderDocument(title, blocks, source = "", persist = true) {
+      cancelLoading();
       stopReading(false, false);
       state.title = title || "Untitled document";
       state.blocks = blocks;
@@ -734,7 +783,13 @@
       state.startBlock = blocks.length ? 0 : null;
       state.endBlock = blocks.length ? blocks.length - 1 : null;
       state.currentSentenceIndex = 0;
+      state.cycle = 1;
       state.selectionAnchor = null;
+      state.nativeText = "";
+      state.nativeParts = [];
+      // A native selection belongs to its previous document. Start new text
+      // in the normal, fully selected range instead of silently reading nothing.
+      if (els.selectionMode.value === "text") els.selectionMode.value = "paragraph";
 
       els.articleTitle.textContent = state.title;
       els.articleMeta.textContent = `${source || "Local text"} · ${estimateReadingTime(blocks.map(b => b.text).join(" "))}`;
@@ -797,12 +852,12 @@
 
       nodes.forEach(node => {
         const index = Number(node.dataset.index);
+        const inRange = state.startBlock !== null && state.endBlock !== null &&
+          index >= state.startBlock && index <= state.endBlock;
         node.classList.toggle(
           "selected-range",
-          state.startBlock !== null &&
-          state.endBlock !== null &&
-          index >= state.startBlock &&
-          index <= state.endBlock
+          els.selectionMode.value === "text" ? state.nativeParts.some(part => part.block === index)
+            : inRange && (els.selectionMode.value !== "headings" || state.blocks[index].type === "h2")
         );
         node.classList.remove("current-sentence");
       });
@@ -812,62 +867,72 @@
           ? 0
           : state.endBlock - state.startBlock + 1;
 
-      els.rangeInfo.textContent = selectedCount
-        ? `Selected blocks ${state.startBlock + 1}–${state.endBlock + 1}`
+      const mode = els.selectionMode.value;
+      els.sliderRangeBox.classList.toggle("hidden", mode === "text");
+      els.content.classList.toggle("text-selection", mode === "text");
+      els.rangeInfo.textContent = mode === "text" ? (state.nativeText ? "Highlighted text" : "Highlight text to select")
+        : mode === "headings" ? "Headings in range" : selectedCount
+        ? `Blocks ${state.startBlock + 1}–${state.endBlock + 1}`
         : "No range selected.";
+      els.selectionHelp.textContent = mode === "text" ? "Highlight text inside the document. Your last highlight stays selected when you use the controls."
+        : mode === "headings" ? "Read detected headings inside the selected block range."
+        : mode === "slider" ? "Choose the first and last blocks with the sliders."
+        : state.selectionAnchor !== null ? "Start chosen. Click the last paragraph, or Play to read just this one."
+        : "Click a first and last paragraph, or use the sliders.";
 
       if (state.startBlock !== null) els.startRange.value = String(state.startBlock);
       if (state.endBlock !== null) els.endRange.value = String(state.endBlock);
       updateSliderLabels();
     }
 
-    function getSelectedText() {
-      if (!state.blocks.length) return "";
-
-      const mode = els.selectionMode.value;
-
-      if (mode === "headings") {
-        return state.blocks
-          .filter(b => b.type === "h2")
-          .map(b => b.text)
-          .join(". ");
+    function selectedParts() {
+      if (!state.blocks.length) return [];
+      if (els.selectionMode.value === "text") {
+        return state.nativeParts.flatMap(part => sentenceSplit(part.text).map(text => ({ text, block: part.block })));
       }
-
-      if (mode === "text") {
-        const selected = window.getSelection().toString().trim();
-        if (selected) return selected;
-      }
-
-      if (state.startBlock === null || state.endBlock === null) return "";
-
-      return state.blocks
-        .slice(state.startBlock, state.endBlock + 1)
-        .map(b => b.text)
-        .join("\n\n");
+      if (state.startBlock === null || state.endBlock === null) return [];
+      return state.blocks.flatMap((block, index) => {
+        if (index < state.startBlock || index > state.endBlock ||
+            (els.selectionMode.value === "headings" && block.type !== "h2")) return [];
+        return sentenceSplit(block.text).map(text => ({ text, block: index }));
+      });
     }
 
     function rebuildSentences() {
-      const selectedText = getSelectedText();
-      const sentences = sentenceSplit(selectedText);
-      if (sentences.join("\n") !== state.sentences.join("\n")) {
+      const parts = selectedParts();
+      const queueKey = JSON.stringify(parts);
+      if (queueKey !== state.queueKey) {
         stopReading(true, false);
       }
-      state.sentences = sentences;
+      state.queueKey = queueKey;
+      state.sentences = parts.map(part => part.text);
+      state.sentenceBlocks = parts.map(part => part.block);
       state.currentSentenceIndex = Math.min(state.currentSentenceIndex, Math.max(0, state.sentences.length - 1));
       updateProgress();
     }
 
     function updateProgress() {
-      els.playBtn.textContent = state.isPaused ? 'Resume' : 'Play';
+      els.playBtn.textContent = state.completed ? 'Replay' : state.waitingForNext ? 'Continue' : state.isPaused ? 'Resume' : 'Play';
+      els.playBtn.disabled = !speechAvailable || !state.sentences.length || (state.isReading && !state.isPaused);
       els.pauseBtn.disabled = !state.isReading || state.isPaused;
-      els.stopBtn.disabled = !state.isReading && !state.isPaused && state.currentSentenceIndex === 0;
+      els.stopBtn.disabled = !state.isReading && !state.isPaused && !state.waitingForNext && !state.completed && state.currentSentenceIndex === 0;
 
       const total = state.sentences.length;
       const current = total ? Math.min(total, state.currentSentenceIndex + 1) : 0;
-      const pct = total ? (state.currentSentenceIndex / total) * 100 : 0;
-
-      els.progressFill.style.width = `${pct}%`;
-      els.timeInfo.textContent = `${current} / ${total} sentences`;
+      els.progress.max = String(Math.max(0, total - 1));
+      els.progress.value = String(Math.min(Math.max(0, total - 1), state.currentSentenceIndex));
+      els.progress.disabled = !total;
+      els.progress.setAttribute("aria-valuetext", total ? `Part ${current} of ${total}` : "No text selected");
+      els.timeInfo.textContent = `${current} / ${total} parts`;
+      els.prevBtn.disabled = !total || state.currentSentenceIndex === 0;
+      els.nextBtn.disabled = !total || state.currentSentenceIndex >= total - 1;
+      const repeat = Number(els.repeatCount.value) || 1;
+      const cycle = repeat > 1 ? ` · Read ${state.cycle} of ${repeat}` : "";
+      const block = state.sentenceBlocks[state.currentSentenceIndex];
+      const location = Number.isInteger(block) ? ` · Block ${block + 1}` : "";
+      els.playbackState.textContent = !speechAvailable ? "Speech is unavailable in this browser. Text reading still works."
+        : !total ? "Select text to read" : state.completed ? "Finished · Replay to start again"
+        : `${state.waitingForNext ? "Ready for next part" : state.isPaused ? "Paused" : state.isReading ? "Reading" : "Ready"}${location}${cycle}`;
     }
 
     function clearCurrentHighlights() {
@@ -876,51 +941,45 @@
       });
     }
 
-    function highlightApproximateSentence(sentence) {
+    function highlightCurrentPart() {
       clearCurrentHighlights();
-
-      const nodes = [...els.content.querySelectorAll(".selectable-block")];
-      const normalizedSentence = sentence.slice(0, 80).toLowerCase();
-
-      const match = nodes.find(node =>
-        node.textContent.toLowerCase().includes(normalizedSentence.slice(0, 35))
-      );
-
+      const block = state.sentenceBlocks[state.currentSentenceIndex];
+      const match = [...els.content.querySelectorAll(".selectable-block")]
+        .find(node => Number(node.dataset.index) === block);
       if (match) {
         match.classList.add("current-sentence");
-        match.scrollIntoView({ behavior: "smooth", block: "center" });
+        match.scrollIntoView({ behavior: "auto", block: "center" });
       }
+    }
+
+    function voiceIdentity(voice) {
+      return voice ? `${voice.voiceURI || voice.name}|${voice.lang}` : "";
     }
 
     function populateVoices() {
-      state.voices = speechSynthesis.getVoices();
-
+      state.voices = speechAvailable ? speechSynthesis.getVoices() : [];
       els.voiceSelect.innerHTML = "";
-
-      if (!state.voices.length) {
+      const defaultOption = document.createElement("option");
+      defaultOption.textContent = "Default browser voice";
+      defaultOption.value = "";
+      els.voiceSelect.appendChild(defaultOption);
+      state.voices.forEach(voice => {
         const opt = document.createElement("option");
-        opt.textContent = "Default browser voice";
-        opt.value = "";
-        els.voiceSelect.appendChild(opt);
-        return;
-      }
-
-      state.voices.forEach((voice, index) => {
-        const opt = document.createElement("option");
-        opt.value = String(index);
+        opt.value = voiceIdentity(voice);
         opt.textContent = `${voice.name} (${voice.lang})${voice.default ? " · default" : ""}`;
         els.voiceSelect.appendChild(opt);
       });
-
-      const preferred = state.voices.findIndex(v =>
-        /^en/i.test(v.lang) && /natural|premium|enhanced|google|microsoft/i.test(v.name)
-      );
-
-      if (preferred >= 0) els.voiceSelect.value = String(preferred);
+      if (state.voiceKey && !state.voices.some(voice => voiceIdentity(voice) === state.voiceKey)) {
+        const unavailable = document.createElement("option");
+        unavailable.value = state.voiceKey;
+        unavailable.textContent = "Saved voice unavailable · using browser default";
+        els.voiceSelect.appendChild(unavailable);
+      }
+      els.voiceSelect.value = state.voiceKey;
     }
 
     function getSpeechSettings() {
-      const selectedVoice = state.voices[Number(els.voiceSelect.value)] || null;
+      const selectedVoice = state.voices.find(voice => voiceIdentity(voice) === state.voiceKey) || null;
       const baseRate = Number(els.rateRange.value);
       const ramp = els.speedRampToggle.checked
         ? Math.min(0.7, state.currentSentenceIndex * 0.01)
@@ -935,14 +994,14 @@
     }
 
     function speakCurrentSentence() {
+      if (!speechAvailable || !state.isReading) return;
       if (!state.sentences.length) {
         setStatus("No readable range selected.", "warn");
         return;
       }
 
       if (state.currentSentenceIndex >= state.sentences.length) {
-        stopReading(false);
-        setStatus("Finished reading.");
+        finishPart();
         return;
       }
 
@@ -950,6 +1009,9 @@
       const settings = getSpeechSettings();
       const utterance = new SpeechSynthesisUtterance(sentence);
       const version = state.speechVersion;
+      state.activeUtterance = utterance;
+      let ended = false;
+      const isCurrent = () => version === state.speechVersion && state.activeUtterance === utterance;
 
       if (settings.voice) utterance.voice = settings.voice;
       utterance.rate = settings.rate;
@@ -957,33 +1019,61 @@
       utterance.volume = settings.volume;
 
       utterance.onstart = () => {
-        if (version !== state.speechVersion) return;
-        state.isReading = true;
-        state.isPaused = false;
-        highlightApproximateSentence(sentence);
+        if (!isCurrent()) return;
+        highlightCurrentPart();
         updateProgress();
-        setStatus("Reading.");
       };
 
       utterance.onend = () => {
-        if (version !== state.speechVersion || !state.isReading || state.isPaused) return;
-        state.currentSentenceIndex += 1;
-        updateProgress();
-        saveSession();
-        speakCurrentSentence();
+        if (!isCurrent() || ended || !state.isReading) return;
+        ended = true;
+        // A final callback can race a user's Pause. Keep it pending until Resume
+        // instead of dropping it and leaving the session permanently stuck.
+        if (state.isPaused) { state.pendingEnd = finishPart; return; }
+        finishPart();
       };
 
       utterance.onerror = () => {
-        if (version !== state.speechVersion) return;
-        setStatus("Speech playback failed. Try another voice or browser.", "error");
+        if (!isCurrent() || ended) return;
         stopReading(false);
+        setStatus("Speech playback failed. Your position is kept. Try Play or choose another voice.", "error");
       };
 
-      speechSynthesis.speak(utterance);
+      try { speechSynthesis.speak(utterance); }
+      catch { utterance.onerror(); }
+    }
+
+    function finishPart() {
+      state.activeUtterance = null;
+      state.pendingEnd = null;
+      state.currentSentenceIndex += 1;
+      if (state.currentSentenceIndex >= state.sentences.length) {
+        if (state.cycle < (Number(els.repeatCount.value) || 1)) {
+          state.cycle += 1;
+          state.currentSentenceIndex = 0;
+        } else {
+          stopReading(false, false);
+          state.currentSentenceIndex = Math.max(0, state.sentences.length - 1);
+          state.completed = true;
+          updateProgress();
+          saveSession();
+          setStatus("Finished reading. Replay starts the range again.");
+          return;
+        }
+      }
+      if (els.pauseBetween.checked) {
+        state.isReading = false;
+        state.waitingForNext = true;
+        highlightCurrentPart();
+      }
+      updateProgress();
+      saveSession();
+      if (!state.waitingForNext) speakCurrentSentence();
     }
 
     function playReading() {
       rebuildSentences();
+      if (!speechAvailable) return;
 
       if (!state.sentences.length) {
         stopReading(false);
@@ -991,15 +1081,26 @@
         return;
       }
 
-      if (state.isPaused && speechSynthesis.paused) {
+      if (state.isPaused && state.pendingEnd) {
+        state.isPaused = false;
+        state.isReading = true;
+        if (speechSynthesis.paused) speechSynthesis.resume();
+        state.pendingEnd();
+        return;
+      }
+      if (state.isPaused) {
         speechSynthesis.resume();
         state.isPaused = false;
         state.isReading = true;
-        setStatus("Resumed.");
         updateProgress();
         return;
       }
 
+      if (state.completed) {
+        state.currentSentenceIndex = 0;
+        state.cycle = 1;
+        state.completed = false;
+      }
       state.speechVersion += 1;
       speechSynthesis.cancel();
       // cancel() clears utterances, but some browsers retain the paused flag.
@@ -1007,12 +1108,13 @@
       if (speechSynthesis.paused) speechSynthesis.resume();
       state.isReading = true;
       state.isPaused = false;
+      state.waitingForNext = false;
       updateProgress();
       speakCurrentSentence();
     }
 
     function pauseReading() {
-      if (speechSynthesis.speaking && !speechSynthesis.paused) {
+      if (speechAvailable && state.isReading && !state.isPaused) {
         speechSynthesis.pause();
         state.isPaused = true;
         setStatus("Paused.");
@@ -1024,9 +1126,13 @@
       state.speechVersion += 1;
       state.isReading = false;
       state.isPaused = false;
-      speechSynthesis.cancel();
+      state.waitingForNext = false;
+      state.completed = false;
+      state.activeUtterance = null;
+      state.pendingEnd = null;
+      if (speechAvailable) speechSynthesis.cancel();
 
-      if (reset) state.currentSentenceIndex = 0;
+      if (reset) { state.currentSentenceIndex = 0; state.cycle = 1; }
 
       clearCurrentHighlights();
       updateProgress();
@@ -1034,16 +1140,21 @@
     }
 
     function skipSentence(delta) {
+      seekPart(state.currentSentenceIndex + delta);
+    }
+
+    function seekPart(index) {
       stopReading(false);
       state.currentSentenceIndex = Math.max(
         0,
-        Math.min(state.sentences.length - 1, state.currentSentenceIndex + delta)
+        Math.min(state.sentences.length - 1, index)
       );
+      state.cycle = 1;
       updateProgress();
       saveSession();
 
       if (state.sentences.length) {
-        highlightApproximateSentence(state.sentences[state.currentSentenceIndex]);
+        highlightCurrentPart();
       }
     }
 
@@ -1058,19 +1169,25 @@
         startBlock: state.startBlock,
         endBlock: state.endBlock,
         currentSentenceIndex: state.currentSentenceIndex,
+        completed: state.completed,
+        nativeParts: state.nativeParts,
         controls: {
           rate: els.rateRange.value,
           pitch: els.pitchRange.value,
           volume: els.volumeRange.value,
           mode: els.selectionMode.value,
-          speedRamp: els.speedRampToggle.checked
+          speedRamp: els.speedRampToggle.checked,
+          voiceKey: state.voiceKey,
+          repeat: els.repeatCount.value,
+          pauseBetween: els.pauseBetween.checked
         }
       };
 
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        els.storageStatus.textContent = "";
       } catch {
-        // Reading remains available when browser storage is blocked or full.
+        els.storageStatus.textContent = "Changes are not saved in this browser. Keep your original text before closing.";
       }
     }
 
@@ -1098,13 +1215,23 @@
         }
         state.currentSentenceIndex = Number.isInteger(payload.currentSentenceIndex)
           ? Math.max(0, payload.currentSentenceIndex) : 0;
+        state.nativeParts = Array.isArray(payload.nativeParts) ? payload.nativeParts.filter(part =>
+          part && typeof part.text === "string" && Number.isInteger(part.block) &&
+          part.block >= 0 && part.block < state.blocks.length && state.blocks[part.block].text.includes(part.text)) : [];
+        state.nativeText = state.nativeParts.map(part => part.text).join("\n\n");
 
         if (payload.controls) {
-          els.rateRange.value = payload.controls.rate || "1";
-          els.pitchRange.value = payload.controls.pitch || "1";
-          els.volumeRange.value = payload.controls.volume || "1";
-          els.selectionMode.value = payload.controls.mode || "paragraph";
+          const bounded = (value, min, max, fallback) => value !== "" && value != null && Number.isFinite(Number(value))
+            ? String(Math.max(min, Math.min(max, Number(value)))) : String(fallback);
+          els.rateRange.value = bounded(payload.controls.rate, .5, 3, 1);
+          els.pitchRange.value = bounded(payload.controls.pitch, .5, 2, 1);
+          els.volumeRange.value = bounded(payload.controls.volume, 0, 1, 1);
+          els.selectionMode.value = ["paragraph", "text", "slider", "headings"].includes(payload.controls.mode) ? payload.controls.mode : "paragraph";
           els.speedRampToggle.checked = Boolean(payload.controls.speedRamp);
+          state.voiceKey = typeof payload.controls.voiceKey === "string" ? payload.controls.voiceKey : "";
+          els.repeatCount.value = ["1", "2", "3", "5"].includes(String(payload.controls.repeat)) ? String(payload.controls.repeat) : "1";
+          els.pauseBetween.checked = Boolean(payload.controls.pauseBetween);
+          populateVoices();
           updateControlLabels();
         }
 
@@ -1112,9 +1239,11 @@
         const restoredPosition = state.currentSentenceIndex;
         rebuildSentences();
         state.currentSentenceIndex = Math.min(restoredPosition, Math.max(0, state.sentences.length - 1));
+        state.completed = Boolean(payload.completed) && state.sentences.length > 0;
         updateProgress();
         saveSession();
         setStatus("Session restored.");
+        showLoadedDocument();
       } catch {
         setStatus("Saved session could not be restored.", "error");
       }
@@ -1124,6 +1253,19 @@
       els.rateValue.textContent = `${Number(els.rateRange.value).toFixed(1)}x`;
       els.pitchValue.textContent = Number(els.pitchRange.value).toFixed(1);
       els.volumeValue.textContent = Number(els.volumeRange.value).toFixed(2);
+    }
+
+    function showLoadedDocument() {
+      els.documentTools.open = false;
+      els.articleTitle.focus();
+    }
+
+    function cancelLoading() {
+      state.loadVersion += 1;
+      if (state.loadController) state.loadController.abort();
+      state.loadController = null;
+      els.loadUrlBtn.disabled = false;
+      els.loadUrlBtn.textContent = "Load URL";
     }
 
     async function loadUrl() {
@@ -1137,18 +1279,27 @@
       let parsed;
       try {
         parsed = new URL(url);
+        if (!["https:", "http:"].includes(parsed.protocol)) throw new Error("Unsupported protocol");
       } catch {
-        setStatus("Invalid URL.", "error");
+        setStatus("Enter an http or https webpage URL.", "error");
         return;
       }
 
-      setStatus("Loading URL...");
+      cancelLoading();
+      const version = state.loadVersion;
+      const controller = new AbortController();
+      state.loadController = controller;
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      els.loadUrlBtn.disabled = true;
+      els.loadUrlBtn.textContent = "Loading…";
+      setStatus("Loading URL… Your current document stays available.");
 
       try {
-        const response = await fetch(parsed.href);
+        const response = await fetch(parsed.href, { signal: controller.signal });
         if (!response.ok) throw new Error("Fetch failed");
 
         const html = await response.text();
+        if (version !== state.loadVersion) return;
         const doc = new DOMParser().parseFromString(html, "text/html");
 
         doc.querySelectorAll("script, style, nav, footer, aside, form, noscript").forEach(n => n.remove());
@@ -1158,29 +1309,25 @@
           doc.querySelector("title")?.textContent ||
           parsed.hostname;
 
-        const candidates = [
-          doc.querySelector("article"),
-          doc.querySelector("main"),
-          doc.body
-        ].filter(Boolean);
-
-        const best = candidates
-          .map(node => ({
-            node,
-            text: normalizeText(node.innerText || "")
-          }))
-          .sort((a, b) => b.text.length - a.text.length)[0];
-
-        if (!best || best.text.length < 100) {
+        const container = doc.querySelector("article") || doc.querySelector("main") || doc.body;
+        const readable = [...container.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote,pre")]
+          .filter(node => !node.querySelector("h1,h2,h3,h4,h5,h6,p,li,blockquote,pre"));
+        const text = normalizeText(readable.length ? readable.map(node => node.textContent).join("\n\n") : container.textContent || "");
+        if (!text) {
           throw new Error("No readable text");
         }
 
-        renderDocument(title.trim(), splitIntoBlocks(best.text), parsed.hostname);
+        renderDocument(title.trim(), splitIntoBlocks(text), parsed.hostname);
+        showLoadedDocument();
       } catch {
+        if (version !== state.loadVersion) return;
         setStatus(
-          "Could not load this page directly. Browser CORS/security restrictions probably blocked it. Use Paste mode.",
+          "Could not load readable text. The page may block browser access or be unavailable. Your document is kept; paste the text instead.",
           "error"
         );
+      } finally {
+        clearTimeout(timeout);
+        if (version === state.loadVersion) cancelLoading();
       }
     }
 
@@ -1194,30 +1341,24 @@
       }
 
       renderDocument(title, splitIntoBlocks(text), "Pasted text");
+      showLoadedDocument();
     }
 
-    function loadDemo() {
+    function loadDemo(focus = false) {
       const demo = `
-Range Reading for the Web
+Try reading aloud
 
-This demo shows how the app handles headings, paragraphs, visual range selection, speech controls, and session recovery.
+Press Play to hear this example, or paste your own text in Document.
 
-The central idea is simple. A user loads or pastes text, selects the portion they want to hear, and starts playback. The app keeps the visible document in place while the control bar stays accessible at the bottom of the screen.
+The central idea is simple. Choose what you want to hear, then read at your own pace. Click a first and last paragraph to select a smaller range.
 
-Paragraph selection is useful when the user wants broad control. The first click defines the start of the range. The second click defines the end of the range. The selected range is highlighted immediately.
+Study at your pace
 
-Native text selection is useful when the user wants fine-grained control. In that mode, the browser selection itself becomes the spoken text. This is best for short extracts.
-
-Slider range selection is useful for long documents. It lets the user choose the start and end blocks without dragging through the article.
-
-Skim mode reads only detected headings. This gives the user a fast overview before listening to the full document.
-
-The speech engine uses the browser Web Speech API. Available voices depend on the operating system and browser. Chrome and Edge usually provide the most predictable results.
-
-The app also stores the last document, selected range, playback position, and speech settings locally in the browser. No account or backend is required.
+Open Study to repeat a passage or pause after each part. Recall it, translate it or read along, then choose Continue. You can change your voice and speed at any time.
       `;
 
       renderDocument("Demo Document", splitIntoBlocks(demo), "Built-in demo");
+      if (focus) showLoadedDocument();
     }
 
     function setTab(mode) {
@@ -1225,6 +1366,8 @@ The app also stores the last document, selected range, playback position, and sp
 
       els.urlTab.classList.toggle("active", useUrl);
       els.pasteTab.classList.toggle("active", !useUrl);
+      els.urlTab.setAttribute("aria-pressed", String(useUrl));
+      els.pasteTab.setAttribute("aria-pressed", String(!useUrl));
       els.urlMode.classList.toggle("hidden", !useUrl);
       els.pasteMode.classList.toggle("hidden", useUrl);
     }
@@ -1234,11 +1377,32 @@ The app also stores the last document, selected range, playback position, and sp
 
     els.loadUrlBtn.addEventListener("click", loadUrl);
     els.loadPasteBtn.addEventListener("click", loadPaste);
-    els.demoBtn.addEventListener("click", loadDemo);
+    els.demoBtn.addEventListener("click", () => loadDemo(true));
     els.resumeBtn.addEventListener("click", resumeSession);
     document.getElementById('focusReader').addEventListener('click', () => setReaderFocus(!document.body.classList.contains('reading-focus')));
 
     els.selectionMode.addEventListener("change", () => {
+      rebuildSentences();
+      updateSelectionVisuals();
+      saveSession();
+    });
+
+    document.addEventListener("selectionchange", () => {
+      if (els.selectionMode.value !== "text") return;
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !selection.rangeCount ||
+          !els.content.contains(selection.anchorNode) || !els.content.contains(selection.focusNode)) return;
+      const selectedRange = selection.getRangeAt(0);
+      state.nativeParts = [...els.content.querySelectorAll(".selectable-block")].flatMap(node => {
+        if (!selectedRange.intersectsNode(node)) return [];
+        const part = selectedRange.cloneRange();
+        part.selectNodeContents(node);
+        if (node.contains(selectedRange.startContainer)) part.setStart(selectedRange.startContainer, selectedRange.startOffset);
+        if (node.contains(selectedRange.endContainer)) part.setEnd(selectedRange.endContainer, selectedRange.endOffset);
+        const text = part.toString().trim();
+        return text ? [{ text, block: Number(node.dataset.index) }] : [];
+      });
+      state.nativeText = state.nativeParts.map(part => part.text).join("\n\n");
       rebuildSentences();
       updateSelectionVisuals();
       saveSession();
@@ -1262,6 +1426,7 @@ The app also stores the last document, selected range, playback position, and sp
 
     els.selectAllBtn.addEventListener("click", () => {
       if (!state.blocks.length) return;
+      if (els.selectionMode.value === "text") els.selectionMode.value = "paragraph";
       state.startBlock = 0;
       state.endBlock = state.blocks.length - 1;
       state.selectionAnchor = null;
@@ -1275,7 +1440,11 @@ The app also stores the last document, selected range, playback position, and sp
       state.startBlock = null;
       state.endBlock = null;
       state.selectionAnchor = null;
+      state.nativeText = "";
+      state.nativeParts = [];
       state.sentences = [];
+      state.sentenceBlocks = [];
+      state.queueKey = "";
       updateSelectionVisuals();
       updateProgress();
       saveSession();
@@ -1297,6 +1466,17 @@ The app also stores the last document, selected range, playback position, and sp
     });
 
     els.speedRampToggle.addEventListener("change", saveSession);
+    els.voiceSelect.addEventListener("change", () => {
+      state.voiceKey = els.voiceSelect.value;
+      saveSession();
+    });
+    els.repeatCount.addEventListener("change", () => {
+      stopReading(false, false);
+      state.cycle = 1;
+      updateProgress();
+      saveSession();
+    });
+    els.pauseBetween.addEventListener("change", saveSession);
 
     els.playBtn.addEventListener("click", playReading);
     els.pauseBtn.addEventListener("click", pauseReading);
@@ -1304,24 +1484,7 @@ The app also stores the last document, selected range, playback position, and sp
     els.prevBtn.addEventListener("click", () => skipSentence(-1));
     els.nextBtn.addEventListener("click", () => skipSentence(1));
 
-    els.progress.addEventListener("click", event => {
-      if (!state.sentences.length) return;
-      stopReading(false);
-
-      const rect = els.progress.getBoundingClientRect();
-      const ratio = (event.clientX - rect.left) / rect.width;
-      state.currentSentenceIndex = Math.max(
-        0,
-        Math.min(state.sentences.length - 1, Math.floor(ratio * state.sentences.length))
-      );
-
-      updateProgress();
-      saveSession();
-
-      if (state.sentences[state.currentSentenceIndex]) {
-        highlightApproximateSentence(state.sentences[state.currentSentenceIndex]);
-      }
-    });
+    els.progress.addEventListener("input", () => seekPart(Number(els.progress.value)));
 
     document.addEventListener("keydown", event => {
       const active = document.activeElement;
@@ -1335,12 +1498,12 @@ The app also stores the last document, selected range, playback position, and sp
         else playReading();
       }
 
-      if (event.key === "ArrowRight") skipSentence(1);
-      if (event.key === "ArrowLeft") skipSentence(-1);
+      if (event.key === "ArrowRight") { event.preventDefault(); skipSentence(1); }
+      if (event.key === "ArrowLeft") { event.preventDefault(); skipSentence(-1); }
       if (event.key === "Escape") stopReading(true);
     });
 
-    speechSynthesis.onvoiceschanged = populateVoices;
+    if (speechAvailable) speechSynthesis.onvoiceschanged = populateVoices;
 
     populateVoices();
     updateControlLabels();
@@ -1350,6 +1513,7 @@ The app also stores the last document, selected range, playback position, and sp
     if (hasSavedSession) setStatus("Saved session available. Select Restore session.");
     else loadDemo();
     setTab("paste");
+    updateProgress();
   </script>
 </body>
 </html>

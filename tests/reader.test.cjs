@@ -7,17 +7,23 @@ const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const key = 'readableVoiceRangeReader.session.v1';
 const saved = { title: 'My document', source: 'Pasted text', blocks: [{type:'p',text:'First sentence. Second sentence.'}], startBlock:0,endBlock:0,currentSentenceIndex:1,controls:{rate:'1.2',pitch:'1',volume:'0',mode:'paragraph'} };
 
-function reader(payload, blocked = false) {
+function reader(payload, blocked = false, overrides = {}) {
   const storage = new Map(payload ? [[key, JSON.stringify(payload)]] : []);
   const elements = new Map();
-  const create = () => ({ value:'1', checked:false, style:{}, dataset:{}, children:[], textContent:'',
-    classList:{add(){},remove(){},toggle(){}}, addEventListener(type, fn){this[type]=fn;},
-    appendChild(node){this.children.push(node);},querySelectorAll(){return [];},scrollIntoView(){} });
+  const create = () => {
+    const classes=new Set();
+    return { value:'1', checked:false, style:{}, dataset:{}, children:[], textContent:'',
+      set className(value){classes.clear();value.split(' ').forEach(c=>classes.add(c));},
+      set innerHTML(value){this.children=[];},
+      classList:{add(c){classes.add(c);},remove(c){classes.delete(c);},contains(c){return classes.has(c);},toggle(c,v){if(v??!classes.has(c))classes.add(c);else classes.delete(c);}},
+      setAttribute(k,v){this[k]=v;}, focus(){}, addEventListener(type, fn){this[type]=fn;},
+      appendChild(node){this.children.push(node);},querySelectorAll(selector){return this.children.filter(node=>node.classList.contains(selector.slice(1)));},scrollIntoView(){} };
+  };
   const speech = {speaking:false,paused:false,queue:[],resumeCalls:0,getVoices:()=>[],cancel(){},speak(u){this.queue.push(u);},resume(){this.paused=false;this.resumeCalls++;},pause(){this.paused=true;}};
   const context = vm.createContext({ document:{ getElementById(id){ if(!elements.has(id))elements.set(id,create()); return elements.get(id);},createElement:create,addEventListener(type, fn){this[type]=fn;} },
     speechSynthesis:speech,SpeechSynthesisUtterance:function(text){this.text=text;},
     localStorage:{getItem(k){if(blocked)throw Error('blocked');return storage.get(k);},setItem(k,v){if(blocked)throw Error('full');storage.set(k,v);}},
-    window:{getSelection:()=>({toString:()=>''})},console });
+    window:{getSelection:()=>({toString:()=>''})},console,URL,AbortController,setTimeout,clearTimeout,...overrides });
   elements.set('selectionMode', {...create(),value:'paragraph'});
   vm.runInContext(script, context);
   return {context,storage,elements,speech,run:code=>vm.runInContext(code,context)};
@@ -155,4 +161,204 @@ test('reader shortcuts leave focused controls, editors and modified keys to the 
   app.context.document.keydown({code:'Space',preventDefault(){prevented=true;}});
   assert.equal(prevented,true);
   assert.equal(app.speech.queue.length,1);
+});
+
+test('repeat finishes exactly the requested number of passes, then Replay starts again',()=>{
+  const app=reader();
+  app.run("renderDocument('Study',[{type:'p',text:'One. Two.'}]);els.repeatCount.value='3';playReading()");
+  for(let i=0;i<6;i++) app.speech.queue.at(-1).onend();
+  assert.deepEqual(app.speech.queue.map(u=>u.text),['One.','Two.','One.','Two.','One.','Two.']);
+  assert.equal(app.run('state.completed'),true);
+  assert.equal(app.run('state.isReading'),false);
+  assert.equal(app.elements.get('playBtn').textContent,'Replay');
+  app.run('playReading()');
+  assert.equal(app.speech.queue.at(-1).text,'One.');
+  assert.equal(app.run('state.cycle'),1);
+});
+
+test('pause after each part waits for Continue, including between repeats, without repeating completed callbacks',()=>{
+  const app=reader();
+  app.run("renderDocument('Study',[{type:'p',text:'One. Two.'}]);els.repeatCount.value='2';els.pauseBetween.checked=true;playReading()");
+  const first=app.speech.queue.at(-1);
+  first.onend();first.onend();first.onerror();
+  assert.equal(app.speech.queue.length,1);
+  assert.equal(app.elements.get('playBtn').textContent,'Continue');
+  assert.equal(app.run('state.currentSentenceIndex'),1);
+  app.run('playReading()');app.speech.queue.at(-1).onend();
+  assert.equal(app.run('state.cycle'),2);
+  assert.equal(app.run('state.waitingForNext'),true);
+  app.run('stopReading();playReading()');
+  assert.equal(app.run('state.cycle'),1);
+  assert.equal(app.speech.queue.at(-1).text,'One.');
+});
+
+test('an end callback racing Pause advances once on Resume and a late onstart cannot unpause',()=>{
+  const app=reader();app.run("renderDocument('Study',[{type:'p',text:'One. Two.'}]);playReading();pauseReading()");
+  const first=app.speech.queue.at(-1);first.onstart();first.onend();
+  assert.equal(app.run('state.isPaused'),true);
+  assert.equal(app.speech.queue.length,1);
+  app.run('playReading()');
+  assert.equal(app.speech.queue.length,2);
+  assert.equal(app.speech.queue.at(-1).text,'Two.');
+  first.onend();first.onerror();
+  assert.equal(app.run('state.isReading'),true);
+  assert.equal(app.run('state.currentSentenceIndex'),1);
+});
+
+test('Stop invalidates a pending paused completion rather than resurrecting it',()=>{
+  const app=reader();app.run('playReading();pauseReading()');
+  const first=app.speech.queue.at(-1);first.onend();
+  app.run('stopReading()');first.onend();
+  assert.equal(app.run('state.pendingEnd'),null);
+  assert.equal(app.run('state.currentSentenceIndex'),0);
+  assert.equal(app.run('state.isReading'),false);
+});
+
+test('identical paragraphs use exact block identity when selecting and highlighting',()=>{
+  const app=reader();app.run("renderDocument('Repeat',[{type:'p',text:'Same text.'},{type:'p',text:'Same text.'}]);handleBlockClick(0);playReading()");
+  const stale=app.speech.queue.at(-1);
+  app.run('state.selectionAnchor=null;handleBlockClick(1)');
+  stale.onend();assert.equal(app.run('state.isReading'),false);
+  app.run('playReading()');app.speech.queue.at(-1).onstart();
+  const blocks=app.elements.get('content').children;
+  assert.equal(blocks[0].classList.contains('current-sentence'),false);
+  assert.equal(blocks[1].classList.contains('current-sentence'),true);
+});
+
+test('native position input stops playback at an exact part and resets study count',()=>{
+  const app=reader();app.run("renderDocument('Study',[{type:'p',text:'One. Two. Three.'}]);playReading();state.cycle=3");
+  const stale=app.speech.queue.at(-1);
+  app.elements.get('progress').value='2';app.elements.get('progress').input();stale.onend();
+  assert.equal(app.run('state.currentSentenceIndex'),2);
+  assert.equal(app.run('state.isReading'),false);
+  assert.equal(app.run('state.cycle'),1);
+  assert.equal(app.elements.get('progress')['aria-valuetext'],'Part 3 of 3');
+  app.run('playReading()');assert.equal(app.speech.queue.at(-1).text,'Three.');
+});
+
+test('Unicode sentence segmentation and long unpunctuated text preserve every non-space character',()=>{
+  const app=reader();
+  const text='こんにちは。世界！ Привет. До свидания. '+('😀カタカナ café '.repeat(250));
+  app.context.sample=text;
+  const parts=Array.from(app.run('sentenceSplit(sample)'));
+  assert.ok(parts.length>4);
+  assert.equal(parts.join('').replace(/\s/g,''),text.replace(/\s/g,''));
+  assert.ok(parts.every(part=>Array.from(part).length<=500));
+  assert.ok(parts.every(part=>!/[\uD800-\uDBFF]$/.test(part)));
+});
+
+test('sentence fallback preserves text on older engines without Intl.Segmenter',()=>{
+  const app=reader(null,false,{Intl:{}});
+  assert.deepEqual(Array.from(app.run("sentenceSplit('bonjour. salut! 你好。再见。')")),['bonjour.','salut!','你好。','再见。']);
+});
+
+test('CJK terminal punctuation stays paragraph text and is excluded from headings-only playback',()=>{
+  const app=reader();
+  app.run("renderDocument('Japanese',splitIntoBlocks('見出し\\n\\nこんにちは。\\n\\n世界！\\n\\n本当？'));els.selectionMode.value='headings';rebuildSentences()");
+  assert.deepEqual(Array.from(app.run('state.blocks.map(block=>block.type)')),['h2','p','p','p']);
+  assert.deepEqual(Array.from(app.run('state.sentences')),['見出し']);
+});
+
+test('large unpunctuated text becomes bounded parts without losing its tail',()=>{
+  const app=reader();app.context.longText='x'.repeat(250001)+'😀';
+  const parts=Array.from(app.run('sentenceSplit(longText)'));
+  assert.equal(parts.length,501);
+  assert.equal(parts.join(''),app.context.longText);
+  assert.equal(parts.at(-1),'x😀');
+});
+
+test('headings respect the chosen range and Clear does not rebuild a hidden queue',()=>{
+  const app=reader();
+  app.run("renderDocument('Study',[{type:'h2',text:'First'},{type:'p',text:'Body.'},{type:'h2',text:'Last'}]);els.selectionMode.value='headings';state.startBlock=2;state.endBlock=2;rebuildSentences()");
+  assert.deepEqual(Array.from(app.run('state.sentences')),['Last']);
+  app.elements.get('clearSelectionBtn').click();app.run('playReading()');
+  assert.equal(app.speech.queue.length,0);
+  assert.equal(app.elements.get('playBtn').disabled,true);
+});
+
+test('empty native selection stays empty; captured excerpts restore without reading unrelated text',()=>{
+  const app=reader();
+  app.run("renderDocument('Study',[{type:'p',text:'First sentence.'},{type:'p',text:'Second sentence.'}]);els.selectionMode.value='text';rebuildSentences();playReading()");
+  assert.equal(app.speech.queue.length,0);
+  app.run("state.nativeParts=[{text:'Second',block:1}];state.nativeText='Second';rebuildSentences();saveSession()");
+  const restored=reader(JSON.parse(app.storage.get(key)));restored.run('resumeSession();playReading()');
+  assert.equal(restored.speech.queue.at(-1).text,'Second');
+  assert.equal(restored.run('state.sentenceBlocks[0]'),1);
+  restored.elements.get('selectAllBtn').click();
+  assert.equal(restored.elements.get('selectionMode').value,'paragraph');
+  assert.equal(restored.run('state.sentences.length'),2);
+});
+
+test('chosen voice survives delayed and reordered voice lists and session restoration',()=>{
+  const app=reader();const english={name:'English',lang:'en',voiceURI:'en'},japanese={name:'Japanese',lang:'ja',voiceURI:'ja'};
+  app.speech.getVoices=()=>[english,japanese];app.run('populateVoices()');
+  app.elements.get('voiceSelect').value='ja|ja';app.elements.get('voiceSelect').change();
+  app.speech.getVoices=()=>[japanese,english];app.speech.onvoiceschanged();
+  assert.equal(app.elements.get('voiceSelect').value,'ja|ja');
+  app.run('playReading()');assert.equal(app.speech.queue.at(-1).voice,japanese);
+  const restored=reader(JSON.parse(app.storage.get(key)));restored.run('resumeSession()');
+  assert.equal(restored.elements.get('voiceSelect').value,'ja|ja');
+  restored.speech.getVoices=()=>[japanese];restored.speech.onvoiceschanged();restored.run('playReading()');
+  assert.equal(restored.speech.queue.at(-1).voice,japanese);
+});
+
+test('completed sessions restore as Replay; invalid saved controls use bounded defaults',()=>{
+  const app=reader({...saved,completed:true,controls:{rate:'NaN',pitch:500,volume:0,mode:'invalid',repeat:99}});
+  app.run('resumeSession()');
+  assert.equal(app.elements.get('rateRange').value,'1');
+  assert.equal(app.elements.get('pitchRange').value,'2');
+  assert.equal(app.elements.get('volumeRange').value,'0');
+  assert.equal(app.elements.get('repeatCount').value,'1');
+  assert.equal(app.elements.get('playBtn').textContent,'Replay');
+  app.run('playReading()');assert.equal(app.speech.queue.at(-1).text,'First sentence.');
+});
+
+test('storage failure is visible while keeping the current readable text',()=>{
+  const app=reader(null,true);app.run("renderDocument('Keep this',[{type:'p',text:'Important text.'}]);playReading()");
+  assert.match(app.elements.get('storageStatus').textContent,/not saved/);
+  assert.equal(app.elements.get('articleTitle').textContent,'Keep this');
+  assert.equal(app.speech.queue.at(-1).text,'Important text.');
+});
+
+test('browsers without speech still load text and expose an accurate unavailable state',()=>{
+  const app=reader(null,false,{speechSynthesis:undefined,SpeechSynthesisUtterance:undefined});
+  assert.equal(app.elements.get('articleTitle').textContent,'Demo Document');
+  assert.equal(app.elements.get('playBtn').disabled,true);
+  assert.match(app.elements.get('playbackState').textContent,/unavailable/);
+});
+
+test('synchronous speech failure preserves position and makes Play available again',()=>{
+  const app=reader();app.speech.speak=()=>{throw Error('blocked');};app.run('skipSentence(1);playReading()');
+  assert.equal(app.run('state.isReading'),false);
+  assert.equal(app.run('state.currentSentenceIndex'),1);
+  assert.equal(app.elements.get('playBtn').disabled,false);
+  assert.match(app.elements.get('status').textContent,/position is kept/);
+});
+
+test('an old URL response cannot replace a newer pasted document or its status',async()=>{
+  let resolve;const app=reader(null,false,{fetch:()=>new Promise(r=>{resolve=r;})});
+  app.elements.get('urlInput').value='https://example.com/old';const pending=app.run('loadUrl()');
+  app.run("renderDocument('New document',[{type:'p',text:'Keep me.'}])");
+  resolve({ok:true,text:async()=>'<article>Old text</article>'});await pending;
+  assert.equal(app.elements.get('articleTitle').textContent,'New document');
+  assert.equal(app.elements.get('loadUrlBtn').disabled,false);
+  assert.equal(app.elements.get('status').textContent,'Loaded 1 readable blocks.');
+});
+
+test('a second URL load invalidates the first even while its text response is pending',async()=>{
+  let resolveText;let calls=0;
+  const app=reader(null,false,{fetch:async()=>++calls===1?{ok:true,text:()=>new Promise(r=>{resolveText=r;})}:{ok:false}});
+  app.elements.get('urlInput').value='https://example.com/old';const first=app.run('loadUrl()');
+  await Promise.resolve();
+  app.elements.get('urlInput').value='https://example.com/new';await app.run('loadUrl()');
+  const status=app.elements.get('status').textContent;
+  resolveText('Old content');await first;
+  assert.equal(app.elements.get('status').textContent,status);
+  assert.equal(app.elements.get('articleTitle').textContent,'Demo Document');
+});
+
+test('non-web URL protocols are rejected before any fetch',async()=>{
+  const app=reader(null,false,{fetch:()=>{throw Error('must not fetch');}});
+  app.elements.get('urlInput').value='file:///secret';await app.run('loadUrl()');
+  assert.match(app.elements.get('status').textContent,/http or https/);
 });
