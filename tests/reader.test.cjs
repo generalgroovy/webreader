@@ -94,6 +94,13 @@ test('restored ranges and sentence positions stay within the document',()=>{
   assert.equal(app.run('state.endBlock'),0);
   assert.equal(app.run('state.currentSentenceIndex'),1);
 });
+
+test('legacy sessions without control settings retain their chosen passage',()=>{
+  const app=reader({title:'Legacy text',blocks:[{type:'p',text:'Do not read this.'},{type:'p',text:'Saved passage.'}],startBlock:1,endBlock:1,currentSentenceIndex:0});
+  app.run('resumeSession();playReading()');
+  assert.equal(app.speech.queue.at(-1).text,'Saved passage.');
+  assert.equal(app.elements.get('rangeInfo').textContent,'Selected passage · 1 paragraph');
+});
 test('changing range while paused resumes the engine and submits a new utterance',()=>{
   const app=reader();app.run('playReading()');app.speech.speaking=true;
   app.run('pauseReading()');assert.equal(app.speech.paused,true);

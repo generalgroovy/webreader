@@ -16,9 +16,13 @@ The independent source review identified inconsistent block/paragraph/part label
 
 ## Verification and review
 
-- Local: `node --test tests/reader.test.cjs` — **40/40 passed**. Five added behavioral regressions cover quiet all-text defaults, passage/full-text/restore transitions, Unicode boundary previews and stale click anchors, explicit cancellation retaining drafts/position, and timeout/late-body/newer-request races. The original Unicode, repeat, speech-race, voice, unavailable-speech and stored-session checks remain.
+- Local: `node --test tests/reader.test.cjs` — **41/41 passed**. Six added behavioral regressions cover quiet all-text defaults, passage/full-text/restore transitions, Unicode boundary previews and stale click anchors, explicit cancellation retaining drafts/position, timeout/late-body/newer-request races, and legacy saved passages without control settings. The original Unicode, repeat, speech-race, voice, unavailable-speech and stored-session checks remain.
+- Owner diff review caught legacy sessions without control settings inheriting the new All text default. Restore now keeps their existing passage; explicit new All text sessions normalize to the full document. The added legacy regression exercises actual playback of the stored passage.
 - `git diff --check` passes. No dependencies, backend or permissions were added.
-- Rendered browser verification and independent final diff review are requested from the lead; their findings and candidate CI result will be added before handoff. This document does not claim publication.
+- Lead browser verification through CUA: **1366×900, 390×844, 320×740 and 1366×600**. A synthetic three-paragraph document containing café and 🎸 opened in quiet All text; selecting paragraphs 2–3 reported exactly two paragraphs and the corresponding start/end previews. Read all text restored the full queue. Read view kept a player return route, which focused Your text. No horizontal overflow or blocking short-screen control problem was observed.
+- A separate synthetic article server delayed its response by 12 seconds. The browser exposed Cancel, kept it available after switching to Paste, and retained the three-paragraph document and unsubmitted draft after cancellation. The delayed response did not replace the document. Reload and Restore session recovered the document in All text. Screenshots are held by the lead in the shared mission evidence as `reader-after-desktop.png` and `reader-after-mobile.png`.
+- Candidate `b44bb05` passed [Reader quality CI](https://github.com/generalgroovy/webreader/actions/runs/37599367151) with 40 checks. Its follow-up adds the legacy-session guard and the 41st check; the final branch CI is tracked in the lead's release handoff.
+- Independent final diff review is the lead's next gate. No blocker was found in the lead's rendered pass; this document does not claim publication or completed independent source approval.
 
 ## Limits
 

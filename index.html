@@ -1252,6 +1252,8 @@
           throw new Error("Invalid saved document");
         }
         renderDocument(payload.title, payload.blocks || [], payload.source || "", false);
+        // Sessions predating saved control settings still own their range.
+        els.selectionMode.value = "paragraph";
 
         const clampBlock = (value, fallback) => Number.isInteger(value)
           ? Math.max(0, Math.min(state.blocks.length - 1, value)) : fallback;
@@ -1282,6 +1284,10 @@
           updateControlLabels();
         }
 
+        if (els.selectionMode.value === "all") {
+          state.startBlock = 0;
+          state.endBlock = state.blocks.length - 1;
+        }
         updateSelectionVisuals();
         const restoredPosition = state.currentSentenceIndex;
         rebuildSentences();
