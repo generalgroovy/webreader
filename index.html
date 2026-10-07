@@ -174,6 +174,7 @@
     button:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
     input[type="range"] { min-height: 28px; }
     .current-part { font-size: .84rem; margin: 2px 0; color: var(--text); }
+    .playback-recovery { margin-top:6px; font-size:.84rem; }
     .storage-note:empty { display: none; }
 
     button:disabled {
@@ -635,6 +636,7 @@
         </div>
         <input type="range" id="progress" min="0" max="0" value="0" step="1" aria-label="Reading position" />
         <div class="current-part" id="playbackState" role="status" aria-live="polite">Ready to read</div>
+        <button class="btn-soft playback-recovery hidden" id="playbackRecovery">Read all text</button>
       </div>
 
       <div class="compact-controls">
@@ -671,6 +673,7 @@
       repeatCount: document.getElementById("repeatCount"),
       pauseBetween: document.getElementById("pauseBetween"),
       playbackState: document.getElementById("playbackState"),
+      playbackRecovery: document.getElementById("playbackRecovery"),
       articleTitle: document.getElementById("articleTitle"),
       articleMeta: document.getElementById("articleMeta"),
       content: document.getElementById("content"),
@@ -725,7 +728,8 @@
       speechVersion: 0,
       loadVersion: 0,
       loadController: null,
-      loadTimeout: null
+      loadTimeout: null,
+      speechError: false
     };
 
     const STORAGE_KEY = "readableVoiceRangeReader.session.v1";
@@ -977,9 +981,19 @@
       els.nextBtn.disabled = !total || state.currentSentenceIndex >= total - 1;
       const repeat = Number(els.repeatCount.value) || 1;
       const cycle = repeat > 1 ? ` · Read ${state.cycle} of ${repeat}` : "";
+      const noSelection = !total && state.blocks.length > 0;
       els.playbackState.textContent = !speechAvailable ? "Speech is unavailable in this browser. Text reading still works."
-        : !total ? "Select text to read" : state.completed ? "Finished · Replay to start again"
+        : state.speechError ? "Speech failed. Your position is kept. Try Play again or choose another voice."
+        : !state.blocks.length ? "Add text or restore your saved session to begin."
+        : !total ? els.selectionMode.value === 'headings' ? "No headings in this passage. Read all text or choose another passage."
+          : els.selectionMode.value === 'text' ? "No excerpt selected. Highlight words in the document or read all text."
+          : "No passage selected. Choose a passage or read all text."
+        : state.completed ? "Finished · Replay to start again"
         : `${state.waitingForNext ? "Continue when ready" : state.isPaused ? "Paused" : state.isReading ? "Reading" : "Ready to listen"}${cycle}`;
+      const recovery = state.speechError ? 'voice' : !state.blocks.length ? 'text' : noSelection ? 'all' : '';
+      els.playbackRecovery.dataset.action = recovery;
+      els.playbackRecovery.classList.toggle('hidden', !recovery);
+      els.playbackRecovery.textContent = recovery === 'voice' ? 'Voice settings' : recovery === 'text' ? 'Add text' : 'Read all text';
     }
 
     function clearCurrentHighlights() {
@@ -1083,6 +1097,8 @@
       utterance.onerror = () => {
         if (!isCurrent() || ended) return;
         stopReading(false);
+        state.speechError = true;
+        updateProgress();
         setStatus("Speech playback failed. Your position is kept. Try Play or choose another voice.", "error");
       };
 
@@ -1149,6 +1165,7 @@
         state.completed = false;
       }
       state.speechVersion += 1;
+      state.speechError = false;
       speechSynthesis.cancel();
       // cancel() clears utterances, but some browsers retain the paused flag.
       // Resume the engine before submitting a new queue after Stop/range changes.
@@ -1171,6 +1188,7 @@
 
     function stopReading(reset = true, persist = true) {
       state.speechVersion += 1;
+      state.speechError = false;
       state.isReading = false;
       state.isPaused = false;
       state.waitingForNext = false;
@@ -1511,7 +1529,7 @@ Open Study to repeat a passage or pause between sentences. Recall it, translate 
       saveSession();
     });
 
-    els.selectAllBtn.addEventListener("click", () => {
+    function readAllText() {
       if (!state.blocks.length) return;
       els.selectionMode.value = "all";
       state.startBlock = 0;
@@ -1520,6 +1538,24 @@ Open Study to repeat a passage or pause between sentences. Recall it, translate 
       updateSelectionVisuals();
       rebuildSentences();
       saveSession();
+    }
+    els.selectAllBtn.addEventListener("click", readAllText);
+    els.playbackRecovery.addEventListener('click', () => {
+      const action = els.playbackRecovery.dataset.action;
+      if (action === 'all') {
+        readAllText();
+        (els.playBtn.disabled ? els.articleTitle : els.playBtn).focus();
+      } else if (action === 'voice') {
+        setReaderFocus(false);
+        els.voiceSelect.focus();
+        els.voiceSelect.scrollIntoView({ block: 'center', behavior: 'auto' });
+      } else if (action === 'text') {
+        setReaderFocus(false);
+        els.documentTools.open = true;
+        setTab('paste');
+        els.pasteInput.focus();
+        els.pasteInput.scrollIntoView({ block: 'center', behavior: 'auto' });
+      }
     });
 
     els.clearSelectionBtn.addEventListener("click", () => {
@@ -1556,6 +1592,8 @@ Open Study to repeat a passage or pause between sentences. Recall it, translate 
     els.speedRampToggle.addEventListener("change", saveSession);
     els.voiceSelect.addEventListener("change", () => {
       state.voiceKey = els.voiceSelect.value;
+      state.speechError = false;
+      updateProgress();
       saveSession();
     });
     els.repeatCount.addEventListener("change", () => {

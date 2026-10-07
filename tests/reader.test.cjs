@@ -126,6 +126,83 @@ test('Play on an empty selection does not mark the reader as active',()=>{
   assert.equal(app.run('state.isReading'),false);assert.equal(app.speech.queue.length,0);
 });
 
+test('speech failure stays visible in Read view and voice recovery preserves passage and position',()=>{
+  const app=reader();
+  app.run("renderDocument('Study',[{type:'p',text:'First. Second.'}]);seekPart(1);setReaderFocus(true);playReading()");
+  const failed=app.speech.queue.at(-1);
+  failed.onerror();
+  assert.match(app.elements.get('playbackState').textContent,/Speech failed\. Your position is kept/);
+  assert.equal(app.elements.get('playbackRecovery').textContent,'Voice settings');
+  assert.equal(app.elements.get('playbackRecovery').classList.contains('hidden'),false);
+  assert.equal(app.run('state.currentSentenceIndex'),1);
+  assert.equal(app.elements.get('playBtn').disabled,false);
+  const queue=app.run('JSON.stringify(state.sentences)');
+  app.elements.get('playbackRecovery').click();
+  assert.equal(app.context.document.body.classList.contains('reading-focus'),false);
+  assert.equal(app.elements.get('voiceSelect').focused,true);
+  assert.equal(app.run('JSON.stringify(state.sentences)'),queue);
+  assert.equal(app.run('state.currentSentenceIndex'),1);
+  assert.equal(app.speech.queue.length,1);
+  app.elements.get('voiceSelect').value='new-voice';app.elements.get('voiceSelect').change();
+  assert.equal(app.elements.get('playbackRecovery').classList.contains('hidden'),true);
+  app.run('playReading()');
+  assert.equal(app.speech.queue.at(-1).text,'Second.');
+  failed.onerror();
+  assert.equal(app.run('state.isReading'),true);
+  assert.doesNotMatch(app.elements.get('playbackState').textContent,/failed/);
+});
+
+test('Play retries a thrown speech failure at the same part and later Stop clears its recovery',()=>{
+  const app=reader();
+  app.run("renderDocument('Study',[{type:'p',text:'First. Second.'}]);seekPart(1)");
+  const speak=app.speech.speak;
+  app.speech.speak=()=>{throw Error('speech engine unavailable');};
+  app.run('playReading()');
+  assert.match(app.elements.get('playbackState').textContent,/Speech failed/);
+  app.speech.speak=speak;
+  app.run('playReading()');
+  assert.equal(app.speech.queue.at(-1).text,'Second.');
+  assert.equal(app.elements.get('playbackRecovery').classList.contains('hidden'),true);
+  app.speech.queue.at(-1).onerror();
+  app.run('stopReading()');
+  assert.equal(app.elements.get('playbackRecovery').classList.contains('hidden'),true);
+  assert.equal(app.run('state.currentSentenceIndex'),0);
+});
+
+test('empty headings, excerpt and cleared passage give a player route back to all text without autoplay',()=>{
+  for(const mode of ['headings','text','paragraph']) {
+    const app=reader();
+    app.run("renderDocument('Plain',[{type:'p',text:'First.'},{type:'p',text:'Second.'}])");
+    app.elements.get('selectionMode').value=mode;app.elements.get('selectionMode').change();
+    if(mode==='paragraph')app.elements.get('clearSelectionBtn').click();
+    app.run('setReaderFocus(true)');
+    assert.equal(app.elements.get('playBtn').disabled,true);
+    assert.match(app.elements.get('playbackState').textContent,mode==='headings'?/No headings/:mode==='text'?/No excerpt/:/No passage/);
+    assert.equal(app.elements.get('playbackRecovery').textContent,'Read all text');
+    app.elements.get('playbackRecovery').click();
+    assert.equal(app.elements.get('selectionMode').value,'all');
+    assert.equal(app.elements.get('playBtn').focused,true);
+    assert.equal(app.run('state.sentences.join(" ")'),'First. Second.');
+    assert.equal(app.speech.queue.length,0);
+    assert.equal(app.elements.get('playbackRecovery').classList.contains('hidden'),true);
+    assert.equal(JSON.parse(app.storage.get(key)).controls.mode,'all');
+    assert.equal(app.context.document.body.classList.contains('reading-focus'),true);
+  }
+});
+
+test('Add text exits an empty Read view without replacing the saved session or draft',()=>{
+  const app=reader(saved);
+  app.elements.get('pasteInput').value='My unfinished draft.';
+  app.run('setReaderFocus(true)');
+  assert.equal(app.elements.get('playbackRecovery').textContent,'Add text');
+  app.elements.get('playbackRecovery').click();
+  assert.equal(app.elements.get('documentTools').open,true);
+  assert.equal(app.elements.get('pasteInput').focused,true);
+  assert.equal(app.elements.get('pasteInput').value,'My unfinished draft.');
+  assert.deepEqual(JSON.parse(app.storage.get(key)),saved);
+  assert.equal(app.run('state.blocks.length'),0);
+});
+
 test('playback labels and disabled actions follow pause, resume, and stop',()=>{
   const app=reader();
   app.run('playReading()');app.speech.speaking=true;
