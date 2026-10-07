@@ -1,6 +1,6 @@
 # Reader playback recovery — 7 October 2026
 
-Baseline: `b050853c253e47cf766062d2f9d902dff75745c6`, clean and matching upstream main at inspection. Candidate branch: `codex/ux-flow-2026-10-07`. Intended live URL: https://generalgroovy.github.io/webreader/. Candidate work is not publication.
+Baseline: `b050853c253e47cf766062d2f9d902dff75745c6`, clean and matching upstream main at inspection. Branch: `codex/ux-flow-2026-10-07`. Published URL: https://generalgroovy.github.io/webreader/.
 
 Observed friction: in Read view, speech failures were reported in the hidden sidebar while the fixed player returned to Ready to listen. Empty heading filters, excerpts or cleared passages disabled Play with only a generic Select text instruction. The recovery route now stays with the player.
 
@@ -15,3 +15,5 @@ Runtime `8ec693bc3e0d3c1edc76887912ef46220e069979` passed [CI 37610835334](https
 Root CUA acceptance passed the real empty-state recovery flow at 390×844: Add text returned focus to the paste input without replacing saved state; Headings only explained an empty queue; Read all text restored the full queue and focused Play. Root inspected `evidence/reader-recovery-phone.png` and authorized main promotion after these gates closed.
 
 Automated synthetic speech verifies UI state and callback behavior, not audible quality or device voice support. Human listening outcomes and physical touch remain outside this evidence.
+
+Release: main fast-forwarded to `275d38f4154a71ae441df6ba66312c40e2997707` after root authorization. The existing legacy Pages build was explicitly requested because the report-only push did not automatically queue it. [Pages deployment 37612133981](https://github.com/generalgroovy/webreader/actions/runs/37612133981) passed. The public `index.html` matched the reviewed runtime's Git bytes exactly; evidence is `ux-flow-2026-10-07/evidence/webreader-public.json`. Later report-only commits retain that runtime.
