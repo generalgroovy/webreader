@@ -310,17 +310,18 @@
       padding: 3px 5px;
       margin-left: -5px;
       transition: background 0.12s ease;
-      cursor: pointer;
+      cursor: text;
     }
 
-    .selectable-block:hover {
+    .choosing-passage .selectable-block:hover {
       background: #f0f5ed;
     }
+    .choosing-passage .selectable-block { cursor: pointer; }
     .text-selection .selectable-block { cursor: text; }
 
     .selected-range {
-      background: #dcebd8 !important;
-      outline: 1px solid #9bb993;
+      background: #edf4e9;
+      box-shadow: -3px 0 var(--accent);
     }
 
     .current-sentence {
@@ -402,6 +403,13 @@
       grid-template-columns: 130px 130px;
       gap: 8px;
     }
+    .return-to-settings { display: none; grid-column: 1 / -1; }
+    .reading-focus .return-to-settings { display: block; }
+    .reading-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .reading-tools button { font-size: .85rem; }
+    .boundary-preview { line-height: 1.45; overflow-wrap: anywhere; }
+    .load-actions { margin-top: 0; }
+    #loadingNotice { margin-top: 12px; }
 
     @media (max-width: 760px) {
       .compact-controls {
@@ -451,6 +459,13 @@
     .header-inner > div { margin-right:auto; }
     .footer-note p { line-height:1.6; }
     #articleTitle:focus { outline:2px solid var(--accent); outline-offset:6px; }
+    #articleTitle, #documentSummary { scroll-margin-top:110px; }
+    @media(max-height:600px) {
+      header { position: static; }
+      #articleTitle, #documentSummary { scroll-margin-top:12px; }
+      .side { position: static; max-height: none; }
+      .control-bar { max-height: 55vh; overflow-y: auto; }
+    }
     @media(max-width:760px) {
       header { padding:12px; } h1 { font-size:1.3rem; }
       .layout { gap:12px; margin-bottom:270px; padding:0 12px; }
@@ -462,6 +477,8 @@
       .progress-top { font-size:.82rem; }
       .progress-top span { min-width:0; }
       .side { padding:14px; }
+      #articleTitle, #documentSummary { scroll-margin-top:12px; }
+      .reading-focus .layout { margin-bottom:320px; }
     }
     @media(prefers-reduced-motion:reduce) { * { scroll-behavior:auto !important; transition:none !important; } }
   </style>
@@ -483,83 +500,89 @@
 
   <main class="layout">
     <aside class="panel side" id="readerSettings">
-      <details class="document-tools" id="documentTools" open><summary>Document</summary>
+      <details class="document-tools" id="documentTools" open><summary id="documentSummary">Your text</summary>
       <div class="tabs">
-        <button class="tab active" id="urlTab">URL</button>
-        <button class="tab" id="pasteTab">Paste</button>
+        <button class="tab active" id="pasteTab" aria-pressed="true">Paste text</button>
+        <button class="tab" id="urlTab" aria-pressed="false">Webpage</button>
       </div>
 
-      <section id="urlMode">
+      <section id="urlMode" class="hidden">
         <label for="urlInput">Webpage URL</label>
         <input id="urlInput" type="url" placeholder="https://example.com/article" />
         <div class="btn-row">
-          <button id="loadUrlBtn">Load URL</button>
+          <button id="loadUrlBtn">Load webpage</button>
         </div>
-
+        <p class="hint">Some sites block loading. You can always paste their text.</p>
       </section>
 
-      <section id="pasteMode" class="hidden">
+      <section id="pasteMode">
+        <label for="pasteInput">Text to read</label>
+        <textarea id="pasteInput" placeholder="Paste something you would like to hear…"></textarea>
+
+        <details><summary>Add a title</summary>
         <label for="titleInput">Optional title</label>
         <input id="titleInput" type="text" placeholder="Document title" />
-
-        <label for="pasteInput">Text / article content</label>
-        <textarea id="pasteInput" placeholder="Paste text here..."></textarea>
+        </details>
 
         <div class="btn-row">
-          <button id="loadPasteBtn">Load Text</button>
+          <button id="loadPasteBtn">Use this text</button>
           <button class="btn-soft" id="demoBtn">Try example</button>
         </div>
       </section>
 
       </details>
+      <div id="loadingNotice" class="hidden">
+        <div class="btn-row load-actions"><button class="btn-soft" id="cancelLoadBtn">Cancel loading</button></div>
+      </div>
       <div id="status" class="status" role="status">
         Ready.
       </div>
       <p id="storageStatus" class="hint storage-note" role="status"></p>
 
-      <details class="mode-box"><summary>Range</summary>
-        <label for="selectionMode">Selection mode</label>
+      <details class="mode-box" id="passageTools"><summary>Choose what to read</summary>
+        <label for="selectionMode">Read</label>
         <select id="selectionMode">
-          <option value="paragraph">Click paragraphs</option>
-          <option value="text">Highlight text</option>
-          <option value="slider">Set first and last block</option>
+          <option value="all">All text</option>
+          <option value="paragraph">Choose paragraphs</option>
+          <option value="text">Highlight exact text</option>
+          <option value="slider">Set start and end</option>
           <option value="headings">Headings only</option>
         </select>
 
         <div class="hint" id="selectionHelp">
-          Paragraph mode: click once for start, click again for end.
+          Play reads your whole document. Choose another option to hear less.
         </div>
 
         <div class="range-controls" id="sliderRangeBox">
           <div class="range-grid">
             <div>
-              <label for="startRange">Start block</label>
+              <label for="startRange">Start at</label>
               <input type="range" id="startRange" min="0" max="0" value="0" />
-              <div class="small-value" id="startValue">0</div>
+              <div class="small-value boundary-preview" id="startValue"></div>
             </div>
             <div>
-              <label for="endRange">End block</label>
+              <label for="endRange">End after</label>
               <input type="range" id="endRange" min="0" max="0" value="0" />
-              <div class="small-value" id="endValue">0</div>
+              <div class="small-value boundary-preview" id="endValue"></div>
             </div>
           </div>
         </div>
 
         <div class="btn-row">
-          <button class="btn-soft" id="selectAllBtn">Select All</button>
+          <button class="btn-soft" id="selectAllBtn">Read all text</button>
           <button class="btn-soft" id="clearSelectionBtn">Clear</button>
         </div>
 
       </details>
 
       <details class="mode-box"><summary>Study</summary>
-        <label for="repeatCount">Read the range</label>
+        <label for="repeatCount">Repeat</label>
         <select id="repeatCount">
           <option value="1">Once</option><option value="2">2 times</option>
           <option value="3">3 times</option><option value="5">5 times</option>
         </select>
-        <label><input type="checkbox" id="pauseBetween" /> Pause after each part</label>
-        <p class="hint">Recall, translate or read along. Continue moves to the next part. Stop starts over.</p>
+        <label><input type="checkbox" id="pauseBetween" /> Pause between sentences</label>
+        <p class="hint">Recall, translate or read along. Continue moves on. Long sentences are read in shorter steps.</p>
       </details>
 
       <div class="mode-box">
@@ -582,13 +605,14 @@
         </label></details>
       </div>
 
-      <details class="footer-note"><summary>Info</summary><p>Paste text or load a webpage. URL loading requires the source site to permit cross-origin access; paste the text if it fails.</p><p>Range: click a first and last paragraph, or use the sliders. Play reads the selection. Stop returns to its beginning. Long sentences become shorter listening parts.</p><p>Study: repeat a range or pause after each part to recall or read along. Voice and speed changes apply to the next part.</p><p>Space: play/pause · ←/→: previous/next part · Escape: stop. Shortcuts leave focused controls to their native behavior.</p><p>Restore session retrieves this browser's last saved text and position. Storage may be cleared by browser settings. Voices depend on your browser and operating system.</p></details>
+      <details class="footer-note"><summary>Info</summary><p>Paste text or load a webpage. Webpage loading requires the source site to permit browser access; paste the text if it fails. Cancel loading keeps your current text and input drafts.</p><p>Choose a passage to read less. Select its first and last paragraph, highlight exact text, or set its start and end. Detected headings count as paragraphs for selection. Stop returns to the beginning of what you chose.</p><p>Study: repeat or pause between sentences. Long sentences become shorter listening steps. Voice and speed changes apply to the next step.</p><p>Space: play/pause · ←/→: previous/next · Escape: stop. Shortcuts leave focused controls to their native behavior.</p><p>Restore session retrieves this browser's last saved text and position. Storage may be cleared by browser settings. Voices depend on your browser and operating system.</p></details>
     </aside>
 
     <section class="panel reader">
       <article>
         <h2 id="articleTitle" tabindex="-1">No document loaded</h2>
         <div id="articleMeta">Load a URL, paste text, or use the demo document.</div>
+        <div class="reading-tools"><button class="btn-soft" id="choosePassageBtn">Choose a passage</button></div>
         <div id="content" class="reader-empty">
           Paste text to begin.
         </div>
@@ -606,8 +630,8 @@
 
       <div class="progress-wrap">
         <div class="progress-top">
-          <span id="rangeInfo">No range selected.</span>
-          <span id="timeInfo">0 / 0 parts</span>
+          <span id="rangeInfo" aria-live="polite">No text selected</span>
+          <span id="timeInfo">0 / 0</span>
         </div>
         <input type="range" id="progress" min="0" max="0" value="0" step="1" aria-label="Reading position" />
         <div class="current-part" id="playbackState" role="status" aria-live="polite">Ready to read</div>
@@ -616,6 +640,7 @@
       <div class="compact-controls">
         <button class="btn-soft" id="prevBtn">Previous</button>
         <button class="btn-soft" id="nextBtn">Next</button>
+        <button class="btn-soft return-to-settings" id="returnSettingsBtn">Text &amp; settings</button>
       </div>
     </div>
   </section>
@@ -624,6 +649,10 @@
     const els = {
       urlTab: document.getElementById("urlTab"),
       documentTools: document.getElementById("documentTools"),
+      documentSummary: document.getElementById("documentSummary"),
+      passageTools: document.getElementById("passageTools"),
+      choosePassageBtn: document.getElementById("choosePassageBtn"),
+      returnSettingsBtn: document.getElementById("returnSettingsBtn"),
       pasteTab: document.getElementById("pasteTab"),
       urlMode: document.getElementById("urlMode"),
       pasteMode: document.getElementById("pasteMode"),
@@ -631,6 +660,8 @@
       titleInput: document.getElementById("titleInput"),
       pasteInput: document.getElementById("pasteInput"),
       loadUrlBtn: document.getElementById("loadUrlBtn"),
+      cancelLoadBtn: document.getElementById("cancelLoadBtn"),
+      loadingNotice: document.getElementById("loadingNotice"),
       loadPasteBtn: document.getElementById("loadPasteBtn"),
       demoBtn: document.getElementById("demoBtn"),
       resumeBtn: document.getElementById("resumeBtn"),
@@ -693,7 +724,8 @@
       selectionAnchor: null,
       speechVersion: 0,
       loadVersion: 0,
-      loadController: null
+      loadController: null,
+      loadTimeout: null
     };
 
     const STORAGE_KEY = "readableVoiceRangeReader.session.v1";
@@ -704,9 +736,11 @@
     function setReaderFocus(focused) {
       document.body.classList.toggle('reading-focus', focused);
       const button = document.getElementById('focusReader');
-      button.textContent = focused ? 'Show controls' : 'Read view';
+      button.textContent = focused ? 'Text & settings' : 'Read view';
       button.setAttribute('aria-pressed', String(focused));
-      if (focused) els.articleTitle.focus();
+      const target = focused ? els.articleTitle : els.documentSummary;
+      target.focus();
+      target.scrollIntoView({ block: 'start', behavior: 'auto' });
     }
 
     function setStatus(message, type = "") {
@@ -787,9 +821,9 @@
       state.selectionAnchor = null;
       state.nativeText = "";
       state.nativeParts = [];
-      // A native selection belongs to its previous document. Start new text
-      // in the normal, fully selected range instead of silently reading nothing.
-      if (els.selectionMode.value === "text") els.selectionMode.value = "paragraph";
+      // Every new document starts ready to read in full; previous passage
+      // boundaries and heading filters belong to the previous document.
+      els.selectionMode.value = "all";
 
       els.articleTitle.textContent = state.title;
       els.articleMeta.textContent = `${source || "Local text"} · ${estimateReadingTime(blocks.map(b => b.text).join(" "))}`;
@@ -810,7 +844,7 @@
       updateSelectionVisuals();
       rebuildSentences();
       if (persist) saveSession();
-      setStatus(`Loaded ${blocks.length} readable blocks.`);
+      setStatus("Your text is ready. Press Play to listen.");
     }
 
     function configureSliders() {
@@ -823,8 +857,14 @@
     }
 
     function updateSliderLabels() {
-      els.startValue.textContent = `Block ${Number(els.startRange.value) + 1}`;
-      els.endValue.textContent = `Block ${Number(els.endRange.value) + 1}`;
+      for (const [input, label] of [[els.startRange, els.startValue], [els.endRange, els.endValue]]) {
+        const index = Number(input.value);
+        const text = state.blocks[index]?.text || "";
+        const points = Array.from(text);
+        const preview = text ? `${index + 1}. ${points.slice(0, 70).join("")}${points.length > 70 ? "…" : ""}` : "No text loaded";
+        label.textContent = preview;
+        input.setAttribute("aria-valuetext", preview);
+      }
     }
 
     function handleBlockClick(index) {
@@ -856,10 +896,10 @@
           index >= state.startBlock && index <= state.endBlock;
         node.classList.toggle(
           "selected-range",
-          els.selectionMode.value === "text" ? state.nativeParts.some(part => part.block === index)
+          els.selectionMode.value === "all" ? false : els.selectionMode.value === "text" ? state.nativeParts.some(part => part.block === index)
             : inRange && (els.selectionMode.value !== "headings" || state.blocks[index].type === "h2")
         );
-        node.classList.remove("current-sentence");
+        if (!state.isReading && !state.waitingForNext) node.classList.remove("current-sentence");
       });
 
       const selectedCount =
@@ -868,17 +908,23 @@
           : state.endBlock - state.startBlock + 1;
 
       const mode = els.selectionMode.value;
-      els.sliderRangeBox.classList.toggle("hidden", mode === "text");
+      els.sliderRangeBox.classList.toggle("hidden", mode !== "slider" && mode !== "headings");
       els.content.classList.toggle("text-selection", mode === "text");
-      els.rangeInfo.textContent = mode === "text" ? (state.nativeText ? "Highlighted text" : "Highlight text to select")
-        : mode === "headings" ? "Headings in range" : selectedCount
-        ? `Blocks ${state.startBlock + 1}–${state.endBlock + 1}`
-        : "No range selected.";
-      els.selectionHelp.textContent = mode === "text" ? "Highlight text inside the document. Your last highlight stays selected when you use the controls."
-        : mode === "headings" ? "Read detected headings inside the selected block range."
-        : mode === "slider" ? "Choose the first and last blocks with the sliders."
+      els.content.classList.toggle("choosing-passage", mode === "paragraph");
+      const headings = state.blocks.filter((block, index) => block.type === "h2" && index >= state.startBlock && index <= state.endBlock).length;
+      els.rangeInfo.textContent = mode === "all" && state.blocks.length ? "All text"
+        : mode === "all" ? "No text loaded" : mode === "text" ? (state.nativeText ? "Selected excerpt" : "Highlight text to select")
+        : mode === "headings" ? (selectedCount && headings ? `${headings} heading${headings === 1 ? "" : "s"}` : "No headings selected")
+        : selectedCount ? (selectedCount === state.blocks.length ? "All text" : `Selected passage · ${selectedCount} paragraph${selectedCount === 1 ? "" : "s"}`)
+        : "No text selected";
+      els.selectionHelp.textContent = mode === "all" ? "Play reads your whole document. Choose another option to hear less."
+        : mode === "text" ? "Highlight text inside the document. Your last highlight stays selected when you use the controls."
+        : mode === "headings" ? "Read detected headings between the chosen start and end."
+        : mode === "slider" ? "Choose where to start and finish. The previews show your boundaries."
         : state.selectionAnchor !== null ? "Start chosen. Click the last paragraph, or Play to read just this one."
-        : "Click a first and last paragraph, or use the sliders.";
+        : "Click the first paragraph, then the last. Choose Set start and end to use the keyboard.";
+      els.selectAllBtn.disabled = mode === "all" || !state.blocks.length;
+      els.choosePassageBtn.disabled = !state.blocks.length;
 
       if (state.startBlock !== null) els.startRange.value = String(state.startBlock);
       if (state.endBlock !== null) els.endRange.value = String(state.endBlock);
@@ -889,6 +935,9 @@
       if (!state.blocks.length) return [];
       if (els.selectionMode.value === "text") {
         return state.nativeParts.flatMap(part => sentenceSplit(part.text).map(text => ({ text, block: part.block })));
+      }
+      if (els.selectionMode.value === "all") {
+        return state.blocks.flatMap((block, index) => sentenceSplit(block.text).map(text => ({ text, block: index })));
       }
       if (state.startBlock === null || state.endBlock === null) return [];
       return state.blocks.flatMap((block, index) => {
@@ -922,17 +971,15 @@
       els.progress.max = String(Math.max(0, total - 1));
       els.progress.value = String(Math.min(Math.max(0, total - 1), state.currentSentenceIndex));
       els.progress.disabled = !total;
-      els.progress.setAttribute("aria-valuetext", total ? `Part ${current} of ${total}` : "No text selected");
-      els.timeInfo.textContent = `${current} / ${total} parts`;
+      els.progress.setAttribute("aria-valuetext", total ? `Reading position ${current} of ${total}` : "No text selected");
+      els.timeInfo.textContent = `${current} / ${total}`;
       els.prevBtn.disabled = !total || state.currentSentenceIndex === 0;
       els.nextBtn.disabled = !total || state.currentSentenceIndex >= total - 1;
       const repeat = Number(els.repeatCount.value) || 1;
       const cycle = repeat > 1 ? ` · Read ${state.cycle} of ${repeat}` : "";
-      const block = state.sentenceBlocks[state.currentSentenceIndex];
-      const location = Number.isInteger(block) ? ` · Block ${block + 1}` : "";
       els.playbackState.textContent = !speechAvailable ? "Speech is unavailable in this browser. Text reading still works."
         : !total ? "Select text to read" : state.completed ? "Finished · Replay to start again"
-        : `${state.waitingForNext ? "Ready for next part" : state.isPaused ? "Paused" : state.isReading ? "Reading" : "Ready"}${location}${cycle}`;
+        : `${state.waitingForNext ? "Continue when ready" : state.isPaused ? "Paused" : state.isReading ? "Reading" : "Ready to listen"}${cycle}`;
     }
 
     function clearCurrentHighlights() {
@@ -1226,7 +1273,7 @@
           els.rateRange.value = bounded(payload.controls.rate, .5, 3, 1);
           els.pitchRange.value = bounded(payload.controls.pitch, .5, 2, 1);
           els.volumeRange.value = bounded(payload.controls.volume, 0, 1, 1);
-          els.selectionMode.value = ["paragraph", "text", "slider", "headings"].includes(payload.controls.mode) ? payload.controls.mode : "paragraph";
+          els.selectionMode.value = ["all", "paragraph", "text", "slider", "headings"].includes(payload.controls.mode) ? payload.controls.mode : "paragraph";
           els.speedRampToggle.checked = Boolean(payload.controls.speedRamp);
           state.voiceKey = typeof payload.controls.voiceKey === "string" ? payload.controls.voiceKey : "";
           els.repeatCount.value = ["1", "2", "3", "5"].includes(String(payload.controls.repeat)) ? String(payload.controls.repeat) : "1";
@@ -1262,10 +1309,22 @@
 
     function cancelLoading() {
       state.loadVersion += 1;
+      clearTimeout(state.loadTimeout);
+      state.loadTimeout = null;
       if (state.loadController) state.loadController.abort();
       state.loadController = null;
       els.loadUrlBtn.disabled = false;
-      els.loadUrlBtn.textContent = "Load URL";
+      els.loadUrlBtn.textContent = "Load webpage";
+      els.loadingNotice.classList.add("hidden");
+      els.urlMode.setAttribute("aria-busy", "false");
+    }
+
+    function cancelRequestedLoad() {
+      if (!state.loadController) return;
+      cancelLoading();
+      setStatus("Loading cancelled. Your text and drafts are kept.");
+      if (!els.urlMode.classList.contains("hidden")) els.urlInput.focus();
+      else els.pasteInput.focus();
     }
 
     async function loadUrl() {
@@ -1289,10 +1348,16 @@
       const version = state.loadVersion;
       const controller = new AbortController();
       state.loadController = controller;
-      const timeout = setTimeout(() => controller.abort(), 15000);
+      state.loadTimeout = setTimeout(() => {
+        if (version !== state.loadVersion) return;
+        cancelLoading();
+        setStatus("Loading took too long. Your text is kept. Try again or paste the text.", "warn");
+      }, 15000);
       els.loadUrlBtn.disabled = true;
       els.loadUrlBtn.textContent = "Loading…";
-      setStatus("Loading URL… Your current document stays available.");
+      els.loadingNotice.classList.remove("hidden");
+      els.urlMode.setAttribute("aria-busy", "true");
+      setStatus("Loading webpage… You can keep reading or cancel.");
 
       try {
         const response = await fetch(parsed.href, { signal: controller.signal });
@@ -1326,7 +1391,6 @@
           "error"
         );
       } finally {
-        clearTimeout(timeout);
         if (version === state.loadVersion) cancelLoading();
       }
     }
@@ -1348,13 +1412,13 @@
       const demo = `
 Try reading aloud
 
-Press Play to hear this example, or paste your own text in Document.
+Press Play to hear this example, or paste your own words in Your text.
 
-The central idea is simple. Choose what you want to hear, then read at your own pace. Click a first and last paragraph to select a smaller range.
+The central idea is simple. Listen at your own pace. Choose a passage to hear just a few paragraphs, or highlight the exact words you want.
 
 Study at your pace
 
-Open Study to repeat a passage or pause after each part. Recall it, translate it or read along, then choose Continue. You can change your voice and speed at any time.
+Open Study to repeat a passage or pause between sentences. Recall it, translate it or read along, then choose Continue. You can change your voice and speed at any time.
       `;
 
       renderDocument("Demo Document", splitIntoBlocks(demo), "Built-in demo");
@@ -1376,12 +1440,29 @@ Open Study to repeat a passage or pause after each part. Recall it, translate it
     els.pasteTab.addEventListener("click", () => setTab("paste"));
 
     els.loadUrlBtn.addEventListener("click", loadUrl);
+    els.cancelLoadBtn.addEventListener("click", cancelRequestedLoad);
     els.loadPasteBtn.addEventListener("click", loadPaste);
     els.demoBtn.addEventListener("click", () => loadDemo(true));
     els.resumeBtn.addEventListener("click", resumeSession);
     document.getElementById('focusReader').addEventListener('click', () => setReaderFocus(!document.body.classList.contains('reading-focus')));
+    els.returnSettingsBtn.addEventListener('click', () => setReaderFocus(false));
+    els.choosePassageBtn.addEventListener('click', () => {
+      setReaderFocus(false);
+      els.passageTools.open = true;
+      if (els.selectionMode.value === 'all') els.selectionMode.value = 'paragraph';
+      state.selectionAnchor = null;
+      updateSelectionVisuals();
+      els.selectionMode.focus();
+      els.selectionMode.scrollIntoView({ block: 'center', behavior: 'auto' });
+      saveSession();
+    });
 
     els.selectionMode.addEventListener("change", () => {
+      state.selectionAnchor = null;
+      if (els.selectionMode.value === 'all') {
+        state.startBlock = state.blocks.length ? 0 : null;
+        state.endBlock = state.blocks.length ? state.blocks.length - 1 : null;
+      }
       rebuildSentences();
       updateSelectionVisuals();
       saveSession();
@@ -1426,7 +1507,7 @@ Open Study to repeat a passage or pause after each part. Recall it, translate it
 
     els.selectAllBtn.addEventListener("click", () => {
       if (!state.blocks.length) return;
-      if (els.selectionMode.value === "text") els.selectionMode.value = "paragraph";
+      els.selectionMode.value = "all";
       state.startBlock = 0;
       state.endBlock = state.blocks.length - 1;
       state.selectionAnchor = null;
@@ -1437,6 +1518,7 @@ Open Study to repeat a passage or pause after each part. Recall it, translate it
 
     els.clearSelectionBtn.addEventListener("click", () => {
       stopReading();
+      if (els.selectionMode.value === "all") els.selectionMode.value = "paragraph";
       state.startBlock = null;
       state.endBlock = null;
       state.selectionAnchor = null;
@@ -1513,6 +1595,7 @@ Open Study to repeat a passage or pause after each part. Recall it, translate it
     if (hasSavedSession) setStatus("Saved session available. Select Restore session.");
     else loadDemo();
     setTab("paste");
+    updateSelectionVisuals();
     updateProgress();
   </script>
 </body>

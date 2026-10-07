@@ -16,11 +16,11 @@ function reader(payload, blocked = false, overrides = {}) {
       set className(value){classes.clear();value.split(' ').forEach(c=>classes.add(c));},
       set innerHTML(value){this.children=[];},
       classList:{add(c){classes.add(c);},remove(c){classes.delete(c);},contains(c){return classes.has(c);},toggle(c,v){if(v??!classes.has(c))classes.add(c);else classes.delete(c);}},
-      setAttribute(k,v){this[k]=v;}, focus(){}, addEventListener(type, fn){this[type]=fn;},
+      setAttribute(k,v){this[k]=v;}, focus(){this.focused=true;}, addEventListener(type, fn){this[type]=fn;},
       appendChild(node){this.children.push(node);},querySelectorAll(selector){return this.children.filter(node=>node.classList.contains(selector.slice(1)));},scrollIntoView(){} };
   };
   const speech = {speaking:false,paused:false,queue:[],resumeCalls:0,getVoices:()=>[],cancel(){},speak(u){this.queue.push(u);},resume(){this.paused=false;this.resumeCalls++;},pause(){this.paused=true;}};
-  const context = vm.createContext({ document:{ getElementById(id){ if(!elements.has(id))elements.set(id,create()); return elements.get(id);},createElement:create,addEventListener(type, fn){this[type]=fn;} },
+  const context = vm.createContext({ document:{ body:{classList:create().classList},getElementById(id){ if(!elements.has(id))elements.set(id,create()); return elements.get(id);},createElement:create,addEventListener(type, fn){this[type]=fn;} },
     speechSynthesis:speech,SpeechSynthesisUtterance:function(text){this.text=text;},
     localStorage:{getItem(k){if(blocked)throw Error('blocked');return storage.get(k);},setItem(k,v){if(blocked)throw Error('full');storage.set(k,v);}},
     window:{getSelection:()=>({toString:()=>''})},console,URL,AbortController,setTimeout,clearTimeout,...overrides });
@@ -75,7 +75,7 @@ test('selecting a different range stops speech and ignores the old completion ca
   const app=reader();
   app.run('playReading()');
   const stale=app.speech.queue.at(-1);
-  app.run('state.startBlock=2; state.endBlock=2; rebuildSentences()');
+  app.run("els.selectionMode.value='slider';state.startBlock=2; state.endBlock=2; rebuildSentences()");
   stale.onend();
   assert.equal(app.run('state.isReading'),false);
   assert.equal(app.run('state.currentSentenceIndex'),0);
@@ -97,7 +97,7 @@ test('restored ranges and sentence positions stay within the document',()=>{
 test('changing range while paused resumes the engine and submits a new utterance',()=>{
   const app=reader();app.run('playReading()');app.speech.speaking=true;
   app.run('pauseReading()');assert.equal(app.speech.paused,true);
-  app.run('state.startBlock=2;state.endBlock=2;rebuildSentences();playReading()');
+  app.run("els.selectionMode.value='slider';state.startBlock=2;state.endBlock=2;rebuildSentences();playReading()");
   assert.equal(app.speech.paused,false);assert.equal(app.speech.resumeCalls,1);
   assert.equal(app.speech.queue.length,2);
   assert.match(app.speech.queue.at(-1).text,/central idea/);
@@ -115,7 +115,7 @@ test('Pause then Play without changing range resumes the existing queue',()=>{
   assert.equal(app.run('state.isPaused'),false);
 });
 test('Play on an empty selection does not mark the reader as active',()=>{
-  const app=reader();app.run('state.startBlock=null;state.endBlock=null;playReading()');
+  const app=reader();app.elements.get('clearSelectionBtn').click();app.run('playReading()');
   assert.equal(app.run('state.isReading'),false);assert.equal(app.speech.queue.length,0);
 });
 
@@ -141,9 +141,10 @@ test('read view preserves the document and exposes a reversible controls action'
   const title=app.elements.get('articleTitle').textContent;
   app.run('setReaderFocus(true)');
   assert.ok(classes.has('reading-focus'));assert.equal(focused,1);
-  assert.equal(app.elements.get('focusReader').textContent,'Show controls');
-  app.run('setReaderFocus(false)');
+  assert.equal(app.elements.get('focusReader').textContent,'Text & settings');
+  app.elements.get('returnSettingsBtn').click();
   assert.equal(classes.has('reading-focus'),false);
+  assert.equal(app.elements.get('documentSummary').focused,true);
   assert.equal(app.elements.get('articleTitle').textContent,title);
 });
 
@@ -215,7 +216,7 @@ test('Stop invalidates a pending paused completion rather than resurrecting it',
 });
 
 test('identical paragraphs use exact block identity when selecting and highlighting',()=>{
-  const app=reader();app.run("renderDocument('Repeat',[{type:'p',text:'Same text.'},{type:'p',text:'Same text.'}]);handleBlockClick(0);playReading()");
+  const app=reader();app.run("renderDocument('Repeat',[{type:'p',text:'Same text.'},{type:'p',text:'Same text.'}]);els.selectionMode.value='paragraph';handleBlockClick(0);playReading()");
   const stale=app.speech.queue.at(-1);
   app.run('state.selectionAnchor=null;handleBlockClick(1)');
   stale.onend();assert.equal(app.run('state.isReading'),false);
@@ -232,7 +233,7 @@ test('native position input stops playback at an exact part and resets study cou
   assert.equal(app.run('state.currentSentenceIndex'),2);
   assert.equal(app.run('state.isReading'),false);
   assert.equal(app.run('state.cycle'),1);
-  assert.equal(app.elements.get('progress')['aria-valuetext'],'Part 3 of 3');
+  assert.equal(app.elements.get('progress')['aria-valuetext'],'Reading position 3 of 3');
   app.run('playReading()');assert.equal(app.speech.queue.at(-1).text,'Three.');
 });
 
@@ -285,7 +286,7 @@ test('empty native selection stays empty; captured excerpts restore without read
   assert.equal(restored.speech.queue.at(-1).text,'Second');
   assert.equal(restored.run('state.sentenceBlocks[0]'),1);
   restored.elements.get('selectAllBtn').click();
-  assert.equal(restored.elements.get('selectionMode').value,'paragraph');
+  assert.equal(restored.elements.get('selectionMode').value,'all');
   assert.equal(restored.run('state.sentences.length'),2);
 });
 
@@ -342,7 +343,7 @@ test('an old URL response cannot replace a newer pasted document or its status',
   resolve({ok:true,text:async()=>'<article>Old text</article>'});await pending;
   assert.equal(app.elements.get('articleTitle').textContent,'New document');
   assert.equal(app.elements.get('loadUrlBtn').disabled,false);
-  assert.equal(app.elements.get('status').textContent,'Loaded 1 readable blocks.');
+  assert.equal(app.elements.get('status').textContent,'Your text is ready. Press Play to listen.');
 });
 
 test('a second URL load invalidates the first even while its text response is pending',async()=>{
@@ -361,4 +362,91 @@ test('non-web URL protocols are rejected before any fetch',async()=>{
   const app=reader(null,false,{fetch:()=>{throw Error('must not fetch');}});
   app.elements.get('urlInput').value='file:///secret';await app.run('loadUrl()');
   assert.match(app.elements.get('status').textContent,/http or https/);
+});
+
+test('new documents open as quiet All text and paragraph clicks cannot change that selection',()=>{
+  const app=reader();
+  assert.equal(app.elements.get('pasteTab')['aria-pressed'],'true');
+  assert.equal(app.elements.get('selectionMode').value,'all');
+  assert.equal(app.elements.get('rangeInfo').textContent,'All text');
+  assert.equal(app.elements.get('content').children.some(node=>node.classList.contains('selected-range')),false);
+  const queue=app.run('state.queueKey');
+  app.run('handleBlockClick(2)');
+  assert.equal(app.run('state.queueKey'),queue);
+  assert.equal(app.run('state.selectionAnchor'),null);
+  app.run("els.selectionMode.value='headings';renderDocument('New',[{type:'p',text:'Keep every word.'}]);playReading()");
+  assert.equal(app.speech.queue.at(-1).text,'Keep every word.');
+});
+
+test('Choose a passage exposes the selection control and Read all text restores a full quiet queue',()=>{
+  const app=reader();
+  app.run('setReaderFocus(true)');
+  app.elements.get('choosePassageBtn').click();
+  assert.equal(app.context.document.body.classList.contains('reading-focus'),false);
+  assert.equal(app.elements.get('passageTools').open,true);
+  assert.equal(app.elements.get('selectionMode').focused,true);
+  app.run('handleBlockClick(2);handleBlockClick(2);playReading()');
+  assert.equal(app.elements.get('rangeInfo').textContent,'Selected passage · 1 paragraph');
+  const stale=app.speech.queue.at(-1);
+  app.elements.get('selectAllBtn').click();stale.onend();
+  assert.equal(app.run('state.isReading'),false);
+  assert.equal(app.elements.get('rangeInfo').textContent,'All text');
+  assert.equal(app.elements.get('content').children.some(node=>node.classList.contains('selected-range')),false);
+  const restored=reader(JSON.parse(app.storage.get(key)));restored.run('resumeSession()');
+  assert.equal(restored.elements.get('selectionMode').value,'all');
+  assert.equal(restored.run('state.sentences.length'),app.run('state.sentences.length'));
+});
+
+test('keyboard range boundaries describe actual Unicode text and a stale click anchor cannot extend another mode',()=>{
+  const app=reader();
+  app.run("renderDocument('Boundaries',[{type:'h2',text:'見出し'},{type:'p',text:'こんにちは。😀'},{type:'p',text:'Last paragraph.'}]);els.selectionMode.value='paragraph';handleBlockClick(0)");
+  app.elements.get('selectionMode').value='slider';app.elements.get('selectionMode').change();
+  assert.equal(app.run('state.selectionAnchor'),null);
+  app.elements.get('endRange').value='2';app.elements.get('endRange').input();
+  app.elements.get('startRange').value='1';app.elements.get('startRange').input();
+  assert.equal(app.elements.get('startRange')['aria-valuetext'],'2. こんにちは。😀');
+  assert.equal(app.elements.get('endRange')['aria-valuetext'],'3. Last paragraph.');
+  assert.equal(app.elements.get('rangeInfo').textContent,'Selected passage · 2 paragraphs');
+  assert.deepEqual(Array.from(app.run('state.sentenceBlocks')),[1,1,2]);
+});
+
+test('Cancel loading keeps document, playback position and both drafts even if an aborted body resolves',async()=>{
+  let resolveText,signal;
+  const app=reader(null,false,{fetch:async(_url,options)=>{signal=options.signal;return {ok:true,text:()=>new Promise(resolve=>{resolveText=resolve;})};}});
+  app.elements.get('urlInput').value='https://example.com/pending';
+  app.elements.get('pasteInput').value='Unsubmitted draft 😀';
+  app.elements.get('titleInput').value='Draft title';
+  app.run('seekPart(2);setTab("url")');
+  const pending=app.run('loadUrl()');await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(app.elements.get('loadingNotice').classList.contains('hidden'),false);
+  app.elements.get('cancelLoadBtn').click();
+  const cancelled=app.elements.get('status').textContent;
+  assert.equal(signal.aborted,true);
+  assert.equal(app.elements.get('urlInput').focused,true);
+  resolveText('<article>Late document.</article>');await pending;
+  assert.equal(app.elements.get('articleTitle').textContent,'Demo Document');
+  assert.equal(app.run('state.currentSentenceIndex'),2);
+  assert.equal(app.elements.get('status').textContent,cancelled);
+  assert.equal(app.elements.get('pasteInput').value,'Unsubmitted draft 😀');
+  assert.equal(app.elements.get('titleInput').value,'Draft title');
+  assert.equal(app.elements.get('urlInput').value,'https://example.com/pending');
+  assert.equal(app.elements.get('loadingNotice').classList.contains('hidden'),true);
+  assert.equal(app.elements.get('loadUrlBtn').disabled,false);
+});
+
+test('timeout cancels stale response bodies and a newer load retains its own loading controls',async()=>{
+  const timers=[];let resolveFirst,resolveSecond,calls=0;
+  const app=reader(null,false,{setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout(){},fetch:async()=>({ok:true,text:()=>new Promise(resolve=>{if(++calls===1)resolveFirst=resolve;else resolveSecond=resolve;})})});
+  app.elements.get('urlInput').value='https://example.com/slow';
+  const first=app.run('loadUrl()');await new Promise(resolve=>setImmediate(resolve));timers[0]();
+  assert.match(app.elements.get('status').textContent,/took too long/);
+  const second=app.run('loadUrl()');await new Promise(resolve=>setImmediate(resolve));
+  resolveFirst('<article>Expired response.</article>');await first;
+  assert.equal(app.elements.get('loadUrlBtn').disabled,true);
+  assert.equal(app.elements.get('loadingNotice').classList.contains('hidden'),false);
+  app.run('setTab("paste")');app.elements.get('cancelLoadBtn').click();
+  assert.equal(app.elements.get('pasteInput').focused,true);
+  resolveSecond('<article>Cancelled second response.</article>');await second;
+  assert.equal(app.elements.get('articleTitle').textContent,'Demo Document');
+  assert.match(app.elements.get('status').textContent,/cancelled/);
 });
