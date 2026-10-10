@@ -1,4 +1,4 @@
-# Readable Voice Range Reader
+# Webreader
 
 [Open the reader](https://generalgroovy.github.io/webreader/). Read a chosen part of a document aloud using your browser's installed speech voices. The app is a static page with no account or backend.
 

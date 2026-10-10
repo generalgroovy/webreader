@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <title>Readable Voice Range Reader</title>
+  <title>Webreader — text to speech</title>
 
   <style>
     :root {
@@ -18,8 +18,8 @@
       --accent-soft: #dbe8d7;
       --danger: #9a3d3d;
       --warn: #9a6a2f;
-      --shadow: 0 18px 50px rgba(0, 0, 0, 0.08);
-      --radius: 18px;
+      --shadow: none;
+      --radius: 6px;
     }
 
     * {
@@ -29,7 +29,7 @@
     body {
       margin: 0;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: linear-gradient(135deg, #f4f1ec 0%, #edf3ed 100%);
+      background: var(--bg);
       color: var(--text);
       line-height: 1.55;
     }
@@ -482,6 +482,12 @@
       .reading-focus .layout { margin-bottom:320px; }
     }
     @media(prefers-reduced-motion:reduce) { * { scroll-behavior:auto !important; transition:none !important; } }
+  /* Reading surface and playback controls are the primary landmarks. */
+    header{padding:16px 22px;background:var(--panel);backdrop-filter:none}
+    .panel{background:var(--panel);box-shadow:none}.reader{border-color:transparent;border-radius:2px}
+    button,input[type="url"],input[type="text"],textarea,select{border-radius:5px}
+    button:hover{transform:none}.control-bar{backdrop-filter:none;box-shadow:0 -1px 0 var(--border)}
+    #articleTitle{font-family:Georgia,serif;font-weight:normal}#articleMeta:empty{display:none}
   </style>
 </head>
 
@@ -513,12 +519,12 @@
         <div class="btn-row">
           <button id="loadUrlBtn">Load webpage</button>
         </div>
-        <p class="hint">Some sites block loading. You can always paste their text.</p>
+        <p class="hint">If loading is blocked, paste the text.</p>
       </section>
 
       <section id="pasteMode">
         <label for="pasteInput">Text to read</label>
-        <textarea id="pasteInput" placeholder="Paste something you would like to hear…"></textarea>
+        <textarea id="pasteInput" placeholder="Paste text here"></textarea>
 
         <details><summary>Add a title</summary>
         <label for="titleInput">Optional title</label>
@@ -551,7 +557,7 @@
         </select>
 
         <div class="hint" id="selectionHelp">
-          Play reads your whole document. Choose another option to hear less.
+          Play reads the whole document.
         </div>
 
         <div class="range-controls" id="sliderRangeBox">
@@ -583,7 +589,7 @@
           <option value="3">3 times</option><option value="5">5 times</option>
         </select>
         <label><input type="checkbox" id="pauseBetween" /> Pause between sentences</label>
-        <p class="hint">Recall, translate or read along. Continue moves on. Long sentences are read in shorter steps.</p>
+        <p class="hint">Continue reads the next step. Long sentences are split into shorter steps.</p>
       </details>
 
       <div class="mode-box">
@@ -612,10 +618,10 @@
     <section class="panel reader">
       <article>
         <h2 id="articleTitle" tabindex="-1">No document loaded</h2>
-        <div id="articleMeta">Load a URL, paste text, or use the demo document.</div>
+        <div id="articleMeta"></div>
         <div class="reading-tools"><button class="btn-soft" id="choosePassageBtn">Choose a passage</button></div>
         <div id="content" class="reader-empty">
-          Paste text to begin.
+          Paste text or choose Try example to begin.
         </div>
       </article>
     </section>
@@ -921,7 +927,7 @@
         : mode === "headings" ? (selectedCount && headings ? `${headings} heading${headings === 1 ? "" : "s"}` : "No headings selected")
         : selectedCount ? (selectedCount === state.blocks.length ? "All text" : `Selected passage · ${selectedCount} paragraph${selectedCount === 1 ? "" : "s"}`)
         : "No text selected";
-      els.selectionHelp.textContent = mode === "all" ? "Play reads your whole document. Choose another option to hear less."
+      els.selectionHelp.textContent = mode === "all" ? "Play reads the whole document."
         : mode === "text" ? "Highlight text inside the document. Your last highlight stays selected when you use the controls."
         : mode === "headings" ? "Read detected headings between the chosen start and end."
         : mode === "slider" ? "Choose where to start and finish. The previews show your boundaries."
