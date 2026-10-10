@@ -107,7 +107,7 @@ test('changing range while paused resumes the engine and submits a new utterance
   app.run("els.selectionMode.value='slider';state.startBlock=2;state.endBlock=2;rebuildSentences();playReading()");
   assert.equal(app.speech.paused,false);assert.equal(app.speech.resumeCalls,1);
   assert.equal(app.speech.queue.length,2);
-  assert.match(app.speech.queue.at(-1).text,/central idea/);
+  assert.match(app.speech.queue.at(-1).text,/Choose a passage/);
 });
 test('Stop while paused starts a fresh queue on the next Play',()=>{
   const app=reader();app.run('playReading()');app.speech.speaking=true;
